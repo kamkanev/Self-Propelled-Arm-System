@@ -59,6 +59,6 @@ Draft labels go to `new_data/labels/` and previews to `new_data/preview/`.
 Review and fix them, then merge and retrain:
 
 ```bash
-python add_reviewed_data.py
+python add_reviewed_data.py --val-frac 0.2 -- Keep in mind that you have to specify a validation fraction recommended value is 0.2 
 python train_paper.py
 ```

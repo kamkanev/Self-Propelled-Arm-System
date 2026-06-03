@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument("--images", type=Path, default=PROJECT_ROOT / "new_data" / "images", help="Reviewed images dir.")
     parser.add_argument("--labels", type=Path, default=PROJECT_ROOT / "new_data" / "labels", help="Reviewed labels dir.")
     parser.add_argument("--dataset", type=Path, default=PROJECT_ROOT / "paper_detect", help="Dataset root (has train/ valid/).")
-    parser.add_argument("--val-frac", type=float, default=0.0, help="Fraction of new images to send to valid/ instead of train/. Default 0.")
+    parser.add_argument("--val-frac", type=float, required=True, help="REQUIRED. Fraction (0.0-1.0) of new images to send to valid/ instead of train/. e.g. 0.2 = 20%% to valid, 80%% to train; 0.0 = all to train.")
     parser.add_argument("--seed", type=int, default=0, help="Shuffle seed for the val split.")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be copied without copying.")
     return parser.parse_args()
@@ -23,6 +23,8 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if not 0.0 <= args.val_frac <= 1.0:
+        raise SystemExit(f"--val-frac must be between 0.0 and 1.0 (got {args.val_frac}).")
     if not args.images.is_dir():
         raise SystemExit(f"Images dir not found: {args.images}")
 
