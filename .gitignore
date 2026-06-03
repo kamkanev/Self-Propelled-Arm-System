@@ -1,0 +1,8 @@
+.venv/
+.cache/
+.sixth/
+__pycache__/
+*.py[cod]
+runs/
+paper_detect/runs/
+*.zip
