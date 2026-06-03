@@ -44,3 +44,21 @@ Example:
 Stop:
 
 Press `q` in the camera window.
+
+## Auto-Label New Images
+
+Pre-label new images with the trained model, then review before training.
+
+Add images to `new_data/images/`, then run:
+
+```bash
+python autolabel.py
+```
+
+Draft labels go to `new_data/labels/` and previews to `new_data/preview/`. 
+Review and fix them, then merge and retrain:
+
+```bash
+python add_reviewed_data.py
+python train_paper.py
+```
