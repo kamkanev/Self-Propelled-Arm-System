@@ -1,5 +1,4 @@
 # Self-Propelled Arm System
-
 ___
 
 ## Install First
@@ -45,4 +44,3 @@ Example:
 Stop:
 
 Press `q` in the camera window.
-# Self-Propelled-Arm-System
