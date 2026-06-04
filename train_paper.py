@@ -24,12 +24,13 @@ from ultralytics import YOLO
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a low-memory paper detector.")
-    parser.add_argument("--model", type=Path, default=Path("yolo11s.pt"), help="Base YOLO model path.")
+    parser.add_argument("--model", type=Path, default=Path("yolo11m.pt"), help="Base YOLO model path. yolo11m is the accuracy ceiling that fits on a 6 GB RTX 3060 ")
     parser.add_argument("--data", type=Path, default=Path("paper_detect/data.yaml"), help="Dataset YAML path.")
-    parser.add_argument("--epochs", type=int, default=50, help="Training epochs.")
-    parser.add_argument("--imgsz", type=int, default=416, help="Image size.")
-    parser.add_argument("--batch", type=int, default=16, help="Batch size. On the RTX 3060 Laptop (6 GB VRAM) at imgsz 416, 16 is a safe fit; try 24-32 if VRAM allows, or -1 to let Ultralytics auto-pick (~60%% VRAM).")
-    parser.add_argument("--workers", type=int, default=2, help="Data loader workers (parallel CPU data loading/augmentation).")
+    parser.add_argument("--epochs", type=int, default=300, help="Training epochs. Small dataset (226 imgs) benefits from many epochs; ")
+    parser.add_argument("--patience", type=int, default=50, )
+    parser.add_argument("--imgsz", type=int, default=640, help="Image size. 640 is the standard high-accuracy resolution and the most impactful accuracy lever for this small-object dataset.")
+    parser.add_argument("--batch", default=-1,)
+    parser.add_argument("--workers", type=int, default=8, help="Data loader workers (parallel CPU data loading/augmentation).")
     parser.add_argument("--device", default="0", help="Training device. '0' = first CUDA GPU (RTX 3060 Laptop). Pass 'cpu' to force CPU.")
     parser.add_argument(
         "--threads",
@@ -48,6 +49,14 @@ def parse_args():
     return parser.parse_args()
 
 
+def parse_batch(value):
+    """Batch may be an int (fixed) or -1 (Ultralytics auto-fit ~60% VRAM)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return value
+
+
 def project_path(path):
     if path.is_absolute():
         return path
@@ -56,6 +65,7 @@ def project_path(path):
 
 def main():
     args = parse_args()
+    batch = parse_batch(args.batch)
     torch.set_num_threads(args.threads)
     cuda_ok = torch.cuda.is_available()
     if str(args.device) != "cpu" and not cuda_ok:
@@ -67,7 +77,8 @@ def main():
     gpu = torch.cuda.get_device_name(0) if cuda_ok else "none"
     print(
         f"[train] device={args.device} gpu={gpu} threads={args.threads} "
-        f"batch={args.batch} workers={args.workers} cache={args.cache}"
+        f"model={args.model} imgsz={args.imgsz} epochs={args.epochs} "
+        f"batch={batch} workers={args.workers} cache={args.cache}"
     )
     model_path = project_path(args.model)
     data_path = project_path(args.data)
@@ -77,11 +88,20 @@ def main():
     model.train(
         data=str(data_path),
         epochs=args.epochs,
+        patience=args.patience,
         imgsz=args.imgsz,
-        batch=args.batch,
+        batch=batch,
         workers=args.workers,
         device=args.device,
         cache=(False if args.cache == "none" else args.cache),
+        # --- accuracy-oriented settings (6 GB RTX 3060 Laptop) ---
+        amp=True,            # mixed precision: ~halves VRAM so imgsz 640 + yolo11m fits
+        cos_lr=True,         # cosine LR decay -> better convergence on small datasets
+        optimizer="auto",    # Ultralytics picks AdamW/SGD + LR for the dataset size
+        close_mosaic=10,     # disable mosaic for final 10 epochs to sharpen boxes
+        # Slightly stronger augmentation helps generalize from only 226 train images
+        mixup=0.1,
+        copy_paste=0.1,
         project=str(project_path_value),
         name=args.name,
         exist_ok=True,
