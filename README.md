@@ -56,9 +56,23 @@ python autolabel.py
 ```
 
 Draft labels go to `new_data/labels/` and previews to `new_data/preview/`. 
-Review and fix them, then merge and retrain:
+Review and fix the labels in **labelImg**. This script auto-creates `classes.txt` and opens labelImg on the new images:
 
 ```bash
-python add_reviewed_data.py --val-frac 0.2 -- Keep in mind that you have to specify a validation fraction recommended value is 0.2 
+python label_data.py
+```
+
+In labelImg, click the format button on the left toolbar until it says **YOLO**, then add/move/delete boxes and save.
+
+When you close labelImg, the previews in `new_data/preview/` refresh to match your edits. To redraw them manually anytime model-free, never changes your labels:
+
+```bash
+python render_labels.py
+```
+
+Then merge and retrain. `--val-frac` is required. it's the fraction of new images held back for validation (`0.2` = 20% recommended):
+
+```bash
+python add_reviewed_data.py --val-frac 0.2 
 python train_paper.py
 ```
