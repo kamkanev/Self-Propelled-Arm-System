@@ -17,11 +17,21 @@ pip install -r requirements.txt
 
 ## Train Paper Model
 
-Run:
+ **NVIDIA RTX 3060 Laptop GPU (~6 GB VRAM) and 32 GB RAM**.
+On that machine install the CUDA build of PyTorch instead of the default requirements:
+
+```bash
+pip install -r requirements-gpu.txt
+```
+
+Run (defaults to GPU `0`):
 
 ```bash
 python train_paper.py
 ```
+
+`train_paper.py` defaults: `--device 0` (CUDA), `--batch 16` (for 6 GB VRAM  `--imgsz 416`;
+try `24`-`32`, or `-1`), `--cache ram`. Force CPU with `--device cpu`.
 
 Stop:
 

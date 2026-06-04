@@ -28,9 +28,9 @@ def parse_args():
     parser.add_argument("--data", type=Path, default=Path("paper_detect/data.yaml"), help="Dataset YAML path.")
     parser.add_argument("--epochs", type=int, default=50, help="Training epochs.")
     parser.add_argument("--imgsz", type=int, default=416, help="Image size.")
-    parser.add_argument("--batch", type=int, default=16, help="Batch size. Bigger batches make each layer's matmul large enough to saturate all CPU cores (raises CPU%% and lowers epoch time at batch=1). 16-32 suits this 10-core / 23 GB machine.")
+    parser.add_argument("--batch", type=int, default=16, help="Batch size. On the RTX 3060 Laptop (6 GB VRAM) at imgsz 416, 16 is a safe fit; try 24-32 if VRAM allows, or -1 to let Ultralytics auto-pick (~60%% VRAM).")
     parser.add_argument("--workers", type=int, default=8, help="Data loader workers (parallel CPU data loading/augmentation).")
-    parser.add_argument("--device", default="cpu", help="Training device. 'cpu' here (no NVIDIA GPU); pass 0 for CUDA if ever available.")
+    parser.add_argument("--device", default="0", help="Training device. '0' = first CUDA GPU (RTX 3060 Laptop). Pass 'cpu' to force CPU.")
     parser.add_argument(
         "--threads",
         type=int,
@@ -41,7 +41,7 @@ def parse_args():
         "--cache",
         choices=["ram", "disk", "none"],
         default="ram",
-        help="Cache images to speed up every epoch after the first. Default: ram (uses spare RAM).",
+        help="Cache images to speed up every epoch after the first. Default: ram (32 GB on the training machine easily holds this dataset).",
     )
     parser.add_argument("--project", type=Path, default=Path("paper_detect/runs"), help="Output directory.")
     parser.add_argument("--name", default="train", help="Run name.")
@@ -57,8 +57,16 @@ def project_path(path):
 def main():
     args = parse_args()
     torch.set_num_threads(args.threads)
+    cuda_ok = torch.cuda.is_available()
+    if str(args.device) != "cpu" and not cuda_ok:
+        print(
+            f"[train] WARNING: device={args.device} requested but CUDA is unavailable. "
+            "Install the CUDA build of torch (pip install -r requirements-gpu.txt) "
+            "or pass --device cpu."
+        )
+    gpu = torch.cuda.get_device_name(0) if cuda_ok else "none"
     print(
-        f"[train] device={args.device} threads={args.threads} "
+        f"[train] device={args.device} gpu={gpu} threads={args.threads} "
         f"batch={args.batch} workers={args.workers} cache={args.cache}"
     )
     model_path = project_path(args.model)
