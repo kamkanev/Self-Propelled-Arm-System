@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=50, help="Training epochs.")
     parser.add_argument("--imgsz", type=int, default=416, help="Image size.")
     parser.add_argument("--batch", type=int, default=16, help="Batch size. On the RTX 3060 Laptop (6 GB VRAM) at imgsz 416, 16 is a safe fit; try 24-32 if VRAM allows, or -1 to let Ultralytics auto-pick (~60%% VRAM).")
-    parser.add_argument("--workers", type=int, default=8, help="Data loader workers (parallel CPU data loading/augmentation).")
+    parser.add_argument("--workers", type=int, default=2, help="Data loader workers (parallel CPU data loading/augmentation).")
     parser.add_argument("--device", default="0", help="Training device. '0' = first CUDA GPU (RTX 3060 Laptop). Pass 'cpu' to force CPU.")
     parser.add_argument(
         "--threads",
