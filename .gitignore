@@ -4,5 +4,4 @@
 __pycache__/
 *.py[cod]
 runs/
-paper_detect/runs/
 *.zip

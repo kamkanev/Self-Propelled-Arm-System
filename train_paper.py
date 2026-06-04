@@ -26,7 +26,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train a low-memory paper detector.")
     parser.add_argument("--model", type=Path, default=Path("yolo11m.pt"), help="Base YOLO model path. yolo11m is the accuracy ceiling that fits on a 6 GB RTX 3060 ")
     parser.add_argument("--data", type=Path, default=Path("paper_detect/data.yaml"), help="Dataset YAML path.")
-    parser.add_argument("--epochs", type=int, default=300, help="Training epochs. Small dataset (226 imgs) benefits from many epochs; ")
+    parser.add_argument("--epochs", type=int, default=100, help="Training epochs. Small dataset (226 imgs) benefits from many epochs; ")
     parser.add_argument("--patience", type=int, default=50, )
     parser.add_argument("--imgsz", type=int, default=640, help="Image size. 640 is the standard high-accuracy resolution and the most impactful accuracy lever for this small-object dataset.")
     parser.add_argument("--batch", default=-1,)
@@ -94,12 +94,10 @@ def main():
         workers=args.workers,
         device=args.device,
         cache=(False if args.cache == "none" else args.cache),
-        # --- accuracy-oriented settings (6 GB RTX 3060 Laptop) ---
         amp=True,            # mixed precision: ~halves VRAM so imgsz 640 + yolo11m fits
         cos_lr=True,         # cosine LR decay -> better convergence on small datasets
         optimizer="auto",    # Ultralytics picks AdamW/SGD + LR for the dataset size
         close_mosaic=10,     # disable mosaic for final 10 epochs to sharpen boxes
-        # Slightly stronger augmentation helps generalize from only 226 train images
         mixup=0.1,
         copy_paste=0.1,
         project=str(project_path_value),
