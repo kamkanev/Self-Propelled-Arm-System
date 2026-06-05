@@ -219,3 +219,107 @@ HW-10 Safety rules:
 - Stop chassis before any arm movement.
 - Keep the arm in carry pose before moving toward the drop-off bin.
 - Stop the chassis before releasing the paper ball.
+
+
+
+### 6 State Pseudocode
+
+state = "SEARCH_PAPER"
+
+while True:
+    frame = camera.read()
+
+    if frame is None:
+        base.stop()
+        state = "ERROR"
+
+    if state == "SEARCH_PAPER":
+        paper = paper_detector.detect(frame)
+
+        if paper is None:
+            base.turn_left(SEARCH_SPEED)
+        else:
+            base.stop()
+            state = "APPROACH_PAPER"
+
+    elif state == "APPROACH_PAPER":
+        paper = paper_detector.detect(frame)
+
+        if paper is None:
+            base.stop()
+            state = "SEARCH_PAPER"
+            continue
+
+        center_x = paper.bbox_center_x
+        bbox_height = paper.bbox_height
+        error_x = center_x - IMAGE_CENTER_X
+
+        if error_x < -CENTER_TOLERANCE:
+            base.turn_left(TURN_SPEED)
+
+        elif error_x > CENTER_TOLERANCE:
+            base.turn_right(TURN_SPEED)
+
+        elif bbox_height < GRASP_BBOX_HEIGHT:
+            base.forward(APPROACH_SPEED)
+
+        else:
+            base.stop()
+            state = "GRASP"
+
+    elif state == "GRASP":
+        base.stop()
+        arm.pre_grasp()
+        gripper.open()
+        arm.grasp()
+        gripper.close()
+        arm.lift()
+        arm.carry()
+        state = "SEARCH_BIN"
+
+    elif state == "SEARCH_BIN":
+        marker = bin_detector.detect(frame)
+
+        if marker is None:
+            base.turn_left(SEARCH_SPEED)
+        else:
+            state = "APPROACH_BIN"
+
+    elif state == "APPROACH_BIN":
+        marker = bin_detector.detect(frame)
+
+        if marker is None:
+            base.stop()
+            state = "SEARCH_BIN"
+            continue
+
+        error_x = marker.bbox_center_x - IMAGE_CENTER_X
+
+        if error_x < -BIN_CENTER_TOLERANCE:
+            base.turn_left(TURN_SPEED)
+
+        elif error_x > BIN_CENTER_TOLERANCE:
+            base.turn_right(TURN_SPEED)
+
+        elif marker.bbox_height < RELEASE_BBOX_HEIGHT:
+            base.forward(APPROACH_SPEED)
+
+        else:
+            base.stop()
+            state = "RELEASE"
+
+    elif state == "RELEASE":
+        base.stop()
+        arm.release_pose()
+        gripper.open()
+        arm.home()
+        state = "SAFE_STOP"
+
+    elif state == "SAFE_STOP":
+        base.stop()
+        break
+
+    elif state == "ERROR":
+        base.stop()
+        arm.safe_pose()
+        break
