@@ -24,11 +24,11 @@ from ultralytics import YOLO
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a low-memory paper detector.")
-    parser.add_argument("--model", type=Path, default=Path("yolo11m.pt"), help="Base YOLO model path. yolo11m is the accuracy ceiling that fits on a 6 GB RTX 3060 ")
+    parser.add_argument("--model", type=Path, default=Path("yolo11n.pt"), help="Base YOLO model path. yolo11n (nano, ~2.6M params) is the variant that runs in real time on the JETANK's Jetson Nano (4 GB shared CPU/GPU memory). Training still happens on the RTX 3060; only the model size is capped for the deployment target. Use yolo11s if the Nano has FPS headroom.")
     parser.add_argument("--data", type=Path, default=Path("paper_detect/data.yaml"), help="Dataset YAML path.")
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs. Small dataset (226 imgs) benefits from many epochs; ")
     parser.add_argument("--patience", type=int, default=50, )
-    parser.add_argument("--imgsz", type=int, default=640, help="Image size. 640 is the standard high-accuracy resolution and the most impactful accuracy lever for this small-object dataset.")
+    parser.add_argument("--imgsz", type=int, default=416, help="Image size. Inference cost scales ~quadratically with imgsz, so this is the biggest FPS lever on the Jetson Nano. Train at the size you deploy at: 416 balances reach (spotting the paper far away) against real-time control. Drop to 320 for more FPS; raise to 640 only if you accept lower FPS or run TensorRT.")
     parser.add_argument("--batch", default=-1,)
     parser.add_argument("--workers", type=int, default=8, help="Data loader workers (parallel CPU data loading/augmentation).")
     parser.add_argument("--device", default="0", help="Training device. '0' = first CUDA GPU (RTX 3060 Laptop). Pass 'cpu' to force CPU.")
@@ -94,7 +94,7 @@ def main():
         workers=args.workers,
         device=args.device,
         cache=(False if args.cache == "none" else args.cache),
-        amp=True,            # mixed precision: ~halves VRAM so imgsz 640 + yolo11m fits
+        amp=True,           
         cos_lr=True,         # cosine LR decay -> better convergence on small datasets
         optimizer="auto",    # Ultralytics picks AdamW/SGD + LR for the dataset size
         close_mosaic=10,     # disable mosaic for final 10 epochs to sharpen boxes
