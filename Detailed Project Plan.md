@@ -1,16 +1,18 @@
 # Detailed Project Plan
 
-## 1. Minimum Deliverable Project Version
+## 1. Minimum Deliverable Version
 
 1. Start the program.
-2. Detect the crumpled paper ball using the onboard camera.
+2. Detect a crumpled paper ball (?or easy-to-grasp object like colored foam cube) using the onboard camera.
 3. Decide whether the target is left, center, or right in the camera image.
 4. Turn left, turn right, or move forward based on the target position.
-5. Stop at the calibrated grasping distance.
-6. Pick up the paper ball using a predefined arm and gripper sequence.
-7. Move to a marked drop-off area with a clear visual marker.
-8. Release the paper ball at the calibrated release position.
-9. Stop and return to a safe state.
+5. Stop at the calibrated grasping distance, wait briefly after stopping.
+6. Perform a multi-frame check to confirm that the target is still inside the calibrated grasping range.
+7. Pick up the target using a predefined arm and gripper sequence.
+8. Verify whether the grasp likely succeeded.
+9. Move to a marked drop-off area with a clear visual marker (?colored/AprilTag) and release.
+10. Stop and return to a safe state.
+
 
 ## 2. Current Missing Parts
 
@@ -26,6 +28,8 @@ Two groups: Software and Hardware.
 
 - The software group decides what the robot should do and when.
 - The hardware group makes the robot execute physical actions reliably.
+
+Both groups must follow a clear interface contract.
 
 ### 3.1 Vision Software Group
 
@@ -91,36 +95,47 @@ Deliverables:
 Self-Propelled-Arm-System/
 |-- README.md
 |-- requirements.txt
-|-- best.pt
 |-- config.yaml
-|-- train_paper.py
-|-- test_detection.py
-|-- paper_detect/
+|-- models/
+|   `-- best.pt
 |-- perception/
 |   |-- camera.py
 |   |-- paper_detector.py
-|   `-- bin_detector.py
+|   |-- bin_detector.py
+|   `-- filters.py
 |-- control/
 |   |-- base_controller.py
 |   |-- arm_controller.py
+|   |-- gripper_controller.py
 |   |-- safety.py
-|   `-- approach.py
+|   `-- watchdog.py
 |-- workflow/
-|   `-- state_machine.py
+|   |-- state_machine.py
+|   `-- state_defs.py
 |-- calibration/
 |   |-- motion_params.yaml
 |   |-- arm_positions.yaml
-|   `-- vision_params.yaml
+|   |-- vision_params.yaml
+|   `-- bin_params.yaml
 |-- scripts/
 |   |-- test_camera.py
 |   |-- test_base.py
 |   |-- test_arm.py
 |   |-- test_paper_detector.py
-|   |-- test_approach_bin.py
+|   |-- test_bin_detector.py
+|   |-- test_grasp_sequence.py
+|   |-- test_full_v0.py
+|   |-- test_full_v1.py
 |   `-- run_robot.py
-`-- docs/
-    |-- interface_contract.md
-    |-- testing_log.md
+|-- docs/
+|   |-- interface_contract.md
+|   |-- calibration_guide.md
+|   |-- testing_log.md
+|   |-- failure_cases.md
+|   `-- demo_protocol.md
+`-- training/
+    |-- train_paper.py
+    `-- test_detection.py
 ```
 
 ## 5. Detailed Task List
@@ -130,17 +145,20 @@ Self-Propelled-Arm-System/
 VS-01 YOLO detection:
 
 - Run `python test_detection.py`.
+Validate that the model works with the onboard camera.
 
 VS-02 Wrap the paper detector:
 
 - Create `perception/paper_detector.py`.
 - Implement `detect_paper(frame)`.
+The function should return a detection object or None.
 
 VS-03 Define direction and distance states:
 
 - Use bbox center to determine left, center, or right.
 - Use bbox area or height to determine far, near, or grasp_range after real distance calibration.
 - Save vision thresholds and calibration values to `calibration/vision_params.yaml`.
+The exact values must be calibrated on the real robot.
 
 VS-04 Implement bin marker detection:
 
@@ -222,104 +240,247 @@ HW-10 Safety rules:
 
 
 
-### 6 State Pseudocode
+## 6. State Machine Pseudocode
 
-state = "SEARCH_PAPER"
+```python
 
-while True:
-    frame = camera.read()
+state = "SEARCH_TARGET"
+retry_count = 0
+last_state_change_time = time.time()
 
-    if frame is None:
-        base.stop()
-        state = "ERROR"
+try:
+    while True:
+        frame = camera.read()
 
-    if state == "SEARCH_PAPER":
-        paper = paper_detector.detect(frame)
+        # Global safety check: stop immediately if camera fails
+        if frame is None:
+            base.emergency_stop()
+            state = "ERROR"
 
-        if paper is None:
-            base.turn_left(SEARCH_SPEED)
-        else:
+        # Global timeout check: avoid getting stuck in one state forever
+        if state_timeout_exceeded(state, last_state_change_time):
             base.stop()
-            state = "APPROACH_PAPER"
-
-    elif state == "APPROACH_PAPER":
-        paper = paper_detector.detect(frame)
-
-        if paper is None:
-            base.stop()
-            state = "SEARCH_PAPER"
+            retry_count += 1
+            state = recover_from_timeout(state, retry_count)
+            last_state_change_time = time.time()
             continue
 
-        center_x = paper.bbox_center_x
-        bbox_height = paper.bbox_height
-        error_x = center_x - IMAGE_CENTER_X
+        # 1. Search for the target object
+        if state == "SEARCH_TARGET":
+            target = target_detector.detect(frame)
 
-        if error_x < -CENTER_TOLERANCE:
-            base.turn_left(TURN_SPEED)
+            if target is None:
+                # Rotate slowly until the target appears
+                base.set_velocity(0.0, SEARCH_TURN_SPEED)
+            else:
+                base.stop()
+                state = "APPROACH_TARGET"
+                last_state_change_time = time.time()
 
-        elif error_x > CENTER_TOLERANCE:
-            base.turn_right(TURN_SPEED)
+        # 2. Align with and approach the target
+        elif state == "APPROACH_TARGET":
+            target = target_detector.detect(frame)
 
-        elif bbox_height < GRASP_BBOX_HEIGHT:
-            base.forward(APPROACH_SPEED)
+            if target is None:
+                # If the target is lost, stop and search again
+                base.stop()
+                state = "SEARCH_TARGET"
+                last_state_change_time = time.time()
+                continue
 
-        else:
+            center_x = target.bbox_center_x
+            bbox_height = target.bbox_height
+            error_x = center_x - IMAGE_CENTER_X
+
+            if error_x < -CENTER_TOLERANCE:
+                # Target is on the left side of the image
+                base.set_velocity(0.0, TURN_SPEED)
+
+            elif error_x > CENTER_TOLERANCE:
+                # Target is on the right side of the image
+                base.set_velocity(0.0, -TURN_SPEED)
+
+            elif bbox_height < GRASP_BBOX_HEIGHT_MIN:
+                # Target is centered but still too far away
+                base.set_velocity(APPROACH_SPEED, 0.0)
+
+            elif bbox_height > GRASP_BBOX_HEIGHT_MAX:
+                # Target is too close, back up slightly
+                base.set_velocity(-BACKUP_SPEED, 0.0)
+
+            else:
+                # Target is centered and within the calibrated grasping range
+                base.stop()
+                sleep(0.5)
+                state = "FINAL_CHECK_TARGET"
+                last_state_change_time = time.time()
+
+        # 3. Final multi-frame check before grasping
+        elif state == "FINAL_CHECK_TARGET":
             base.stop()
-            state = "GRASP"
+            stable_count = 0
 
-    elif state == "GRASP":
-        base.stop()
-        arm.pre_grasp()
-        gripper.open()
-        arm.grasp()
-        gripper.close()
-        arm.lift()
-        arm.carry()
-        state = "SEARCH_BIN"
+            for _ in range(FINAL_CHECK_FRAMES):
+                frame = camera.read()
+                target = target_detector.detect(frame)
 
-    elif state == "SEARCH_BIN":
-        marker = bin_detector.detect(frame)
+                if target is not None:
+                    error_x = target.bbox_center_x - IMAGE_CENTER_X
+                    bbox_height = target.bbox_height
 
-        if marker is None:
-            base.turn_left(SEARCH_SPEED)
-        else:
-            state = "APPROACH_BIN"
+                    if (
+                        target.confidence >= CONF_THRESHOLD
+                        and abs(error_x) < FINAL_CENTER_TOLERANCE
+                        and GRASP_BBOX_HEIGHT_MIN <= bbox_height <= GRASP_BBOX_HEIGHT_MAX
+                    ):
+                        stable_count += 1
 
-    elif state == "APPROACH_BIN":
-        marker = bin_detector.detect(frame)
+                sleep(0.05)
 
-        if marker is None:
+            if stable_count >= REQUIRED_STABLE_FRAMES:
+                state = "GRASP_TARGET"
+            else:
+                state = "APPROACH_TARGET"
+
+            last_state_change_time = time.time()
+
+        # 4. Execute predefined arm and gripper grasping sequence
+        elif state == "GRASP_TARGET":
             base.stop()
-            state = "SEARCH_BIN"
-            continue
 
-        error_x = marker.bbox_center_x - IMAGE_CENTER_X
+            arm.pre_grasp()
+            gripper.open()
 
-        if error_x < -BIN_CENTER_TOLERANCE:
-            base.turn_left(TURN_SPEED)
+            arm.grasp()
+            gripper.close()
+            sleep(GRIPPER_SETTLE_TIME)
 
-        elif error_x > BIN_CENTER_TOLERANCE:
-            base.turn_right(TURN_SPEED)
+            arm.lift()
+            arm.carry()
 
-        elif marker.bbox_height < RELEASE_BBOX_HEIGHT:
-            base.forward(APPROACH_SPEED)
+            state = "VERIFY_GRASP"
+            last_state_change_time = time.time()
 
-        else:
+        # 5. Verify whether grasp likely succeeded
+        elif state == "VERIFY_GRASP":
+            frame = camera.read()
+            target = target_detector.detect(frame)
+
+            if grasp_likely_successful(target):
+                state = "SEARCH_DROPOFF"
+            else:
+                retry_count += 1
+
+                if retry_count <= MAX_GRASP_RETRIES:
+                    state = "FINAL_CHECK_TARGET"
+                else:
+                    state = "ERROR"
+
+            last_state_change_time = time.time()
+
+        # 6. Search for the marked drop-off area
+        elif state == "SEARCH_DROPOFF":
+            marker = dropoff_detector.detect(frame)
+
+            if marker is None:
+                # Rotate slowly until the drop-off marker appears
+                base.set_velocity(0.0, SEARCH_TURN_SPEED)
+            else:
+                base.stop()
+                state = "APPROACH_DROPOFF"
+                last_state_change_time = time.time()
+
+        # 7. Align with and approach the drop-off area
+        elif state == "APPROACH_DROPOFF":
+            marker = dropoff_detector.detect(frame)
+
+            if marker is None:
+                # If the marker is lost, stop and search again
+                base.stop()
+                state = "SEARCH_DROPOFF"
+                last_state_change_time = time.time()
+                continue
+
+            center_x = marker.bbox_center_x
+            bbox_height = marker.bbox_height
+            error_x = center_x - IMAGE_CENTER_X
+
+            if error_x < -DROPOFF_CENTER_TOLERANCE:
+                # Drop-off marker is on the left side of the image
+                base.set_velocity(0.0, TURN_SPEED)
+
+            elif error_x > DROPOFF_CENTER_TOLERANCE:
+                # Drop-off marker is on the right side of the image
+                base.set_velocity(0.0, -TURN_SPEED)
+
+            elif bbox_height < RELEASE_BBOX_HEIGHT_MIN:
+                # Marker is centered but still too far away
+                base.set_velocity(DROPOFF_APPROACH_SPEED, 0.0)
+
+            elif bbox_height > RELEASE_BBOX_HEIGHT_MAX:
+                # Marker is too close, back up slightly
+                base.set_velocity(-BACKUP_SPEED, 0.0)
+
+            else:
+                # Marker is centered and within the calibrated release range
+                base.stop()
+                sleep(0.5)
+                state = "FINAL_CHECK_DROPOFF"
+                last_state_change_time = time.time()
+
+        # 8. Final multi-frame check before releasing
+        elif state == "FINAL_CHECK_DROPOFF":
             base.stop()
-            state = "RELEASE"
+            stable_count = 0
 
-    elif state == "RELEASE":
-        base.stop()
-        arm.release_pose()
-        gripper.open()
-        arm.home()
-        state = "SAFE_STOP"
+            for _ in range(FINAL_DROPOFF_CHECK_FRAMES):
+                frame = camera.read()
+                marker = dropoff_detector.detect(frame)
 
-    elif state == "SAFE_STOP":
-        base.stop()
-        break
+                if marker is not None:
+                    error_x = marker.bbox_center_x - IMAGE_CENTER_X
+                    bbox_height = marker.bbox_height
 
-    elif state == "ERROR":
-        base.stop()
-        arm.safe_pose()
-        break
+                    if (
+                        abs(error_x) < FINAL_DROPOFF_CENTER_TOLERANCE
+                        and RELEASE_BBOX_HEIGHT_MIN <= bbox_height <= RELEASE_BBOX_HEIGHT_MAX
+                    ):
+                        stable_count += 1
+
+                sleep(0.05)
+
+            if stable_count >= REQUIRED_STABLE_DROPOFF_FRAMES:
+                state = "RELEASE_TARGET"
+            else:
+                state = "APPROACH_DROPOFF"
+
+            last_state_change_time = time.time()
+
+        # 9. Release the target at the calibrated drop-off position
+        elif state == "RELEASE_TARGET":
+            base.stop()
+
+            arm.release_pose()
+            gripper.open()
+            sleep(RELEASE_SETTLE_TIME)
+
+            arm.home()
+            state = "SAFE_STOP"
+            last_state_change_time = time.time()
+
+        # 10. Safe stop after successful task completion
+        elif state == "SAFE_STOP":
+            base.stop()
+            arm.safe_pose()
+            break
+
+        # Error handling
+        elif state == "ERROR":
+            base.emergency_stop()
+            arm.safe_pose()
+            break
+
+finally:
+    base.emergency_stop()
+    arm.safe_pose()
+```
