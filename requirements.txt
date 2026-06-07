@@ -5,3 +5,7 @@ torchvision==0.27.0+cpu
 ultralytics
 opencv-python
 typeguard
+label-studio
+pip
+roboflow
+python-dotenv

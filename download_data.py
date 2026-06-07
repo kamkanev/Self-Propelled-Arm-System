@@ -9,7 +9,7 @@ def download_dataset():
     workspace = rf.workspace(os.getenv("WORKSPACE_ID"))
     project = workspace.project(os.getenv("PROJECT_ID"))
     
-    dataset = project.version(1).download(model_format="yolov11", location="./data")
+    dataset = project.version(1).download(model_format="yolov11", location="./paper_detect")
     
     print("Dataset downloaded successfully to:", dataset.location)
 
