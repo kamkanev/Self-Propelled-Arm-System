@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument("--data", type=Path, default=Path("paper_detect/data.yaml"), help="Dataset YAML path.")
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs. Small dataset (226 imgs) benefits from many epochs; ")
     parser.add_argument("--patience", type=int, default=50, )
-    parser.add_argument("--imgsz", type=int, default=416, help="Image size. Inference cost scales ~quadratically with imgsz, so this is the biggest FPS lever on the Jetson Nano. Train at the size you deploy at: 416 balances reach (spotting the paper far away) against real-time control. Drop to 320 for more FPS; raise to 640 only if you accept lower FPS or run TensorRT.")
+    parser.add_argument("--imgsz", type=int, default=416, help="Idk hopefully it runs better than last time.")
     parser.add_argument("--batch", default=-1,)
     parser.add_argument("--workers", type=int, default=8, help="Data loader workers (parallel CPU data loading/augmentation).")
     parser.add_argument("--device", default="0", help="Training device. '0' = first CUDA GPU (RTX 3060 Laptop). Pass 'cpu' to force CPU.")

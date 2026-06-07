@@ -30,8 +30,10 @@ Run (defaults to GPU `0`):
 python train_paper.py
 ```
 
-`train_paper.py` defaults: `--device 0` (CUDA), `--batch 16` (for 6 GB VRAM  `--imgsz 416`;
-try `24`-`32`, or `-1`), `--cache ram`. Force CPU with `--device cpu`.
+`train_paper.py` defaults: `--model yolo11n.pt` (nano model sized to run in real time on the
+JETANK's Jetson Nano 4 GB), `--imgsz 416`, `--device 0` (CUDA), `--batch -1` (auto-fit VRAM),
+`--cache ram`. Force CPU with `--device cpu`. The script copies the best weights to `best.pt`,
+which is what the robot loads for inference.
 
 Stop:
 
