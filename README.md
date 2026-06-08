@@ -1,6 +1,11 @@
 # Self-Propelled Arm System
 ___
 
+## Plans
+
+- [Detailed Project Plan](Detailed%20Project%20Plan.md)
+- [Trello Todo List](https://trello.com/b/hB05vBUY/cps-project)
+
 ## Install First
 
 - Python 3
