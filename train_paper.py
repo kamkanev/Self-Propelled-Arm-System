@@ -46,6 +46,20 @@ def parse_args():
     )
     parser.add_argument("--project", type=Path, default=Path("paper_detect/runs"), help="Output directory.")
     parser.add_argument("--name", default="train", help="Run name.")
+    parser.add_argument(
+        "--save-period",
+        type=int,
+        default=10,
+        help="Save a numbered checkpoint (epoch{N}.pt) every N epochs, in addition to "
+        "the always-updated last.pt/best.pt. These distinct files survive a crash that "
+        "corrupts last.pt mid-write, and let you resume from any earlier point. -1 disables.",
+    )
+    parser.add_argument(
+        "--resume",
+        nargs="?",
+        const="last",
+        default=None,
+    )
     return parser.parse_args()
 
 
@@ -63,6 +77,25 @@ def project_path(path):
     return PROJECT_ROOT / path
 
 
+def resolve_resume(resume_value, project_path_value, name):
+    """Return the checkpoint path to resume from, or None for a fresh run.
+    `--resume` (bare) -> the run's weights/last.pt.
+    `--resume <path>` -> that specific checkpoint (e.g. .../weights/epoch50.pt).
+    """
+    if resume_value is None:
+        return None
+    if resume_value == "last":
+        ckpt = project_path_value / name / "weights" / "last.pt"
+    else:
+        ckpt = project_path(Path(resume_value))
+    if not ckpt.exists():
+        raise FileNotFoundError(
+            f"Cannot resume: checkpoint not found at {ckpt}. "
+            "Check --name/--project, or pass an explicit checkpoint path to --resume."
+        )
+    return ckpt
+
+
 def main():
     args = parse_args()
     batch = parse_batch(args.batch)
@@ -78,32 +111,41 @@ def main():
     print(
         f"[train] device={args.device} gpu={gpu} threads={args.threads} "
         f"model={args.model} imgsz={args.imgsz} epochs={args.epochs} "
-        f"batch={batch} workers={args.workers} cache={args.cache}"
+        f"batch={batch} workers={args.workers} cache={args.cache} "
+        f"save_period={args.save_period}"
     )
     model_path = project_path(args.model)
     data_path = project_path(args.data)
     project_path_value = project_path(args.project)
 
-    model = YOLO(str(model_path))
-    model.train(
-        data=str(data_path),
-        epochs=args.epochs,
-        patience=args.patience,
-        imgsz=args.imgsz,
-        batch=batch,
-        workers=args.workers,
-        device=args.device,
-        cache=(False if args.cache == "none" else args.cache),
-        amp=True,           
-        cos_lr=True,         # cosine LR decay -> better convergence on small datasets
-        optimizer="auto",    # Ultralytics picks AdamW/SGD + LR for the dataset size
-        close_mosaic=10,     # disable mosaic for final 10 epochs to sharpen boxes
-        mixup=0.1,
-        copy_paste=0.1,
-        project=str(project_path_value),
-        name=args.name,
-        exist_ok=True,
-    )
+    resume_ckpt = resolve_resume(args.resume, project_path_value, args.name)
+
+    if resume_ckpt is not None:
+        print(f"[train] resuming from {resume_ckpt}")
+        model = YOLO(str(resume_ckpt))
+        model.train(resume=True)
+    else:
+        model = YOLO(str(model_path))
+        model.train(
+            data=str(data_path),
+            epochs=args.epochs,
+            patience=args.patience,
+            imgsz=args.imgsz,
+            batch=batch,
+            workers=args.workers,
+            device=args.device,
+            cache=(False if args.cache == "none" else args.cache),
+            amp=True,
+            cos_lr=True,         
+            optimizer="auto",    
+            close_mosaic=10,     
+            mixup=0.1,
+            copy_paste=0.1,
+            save_period=args.save_period,  # numbered epoch{N}.pt checkpoints for crash recovery
+            project=str(project_path_value),
+            name=args.name,
+            exist_ok=True,
+        )
 
     trained_best = project_path_value / args.name / "weights" / "best.pt"
     default_best = PROJECT_ROOT / "best.pt"
