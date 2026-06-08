@@ -14,6 +14,13 @@ import cv2
 import numpy as np
 import torch
 
+try:
+    from ultralytics import YOLO  # type: ignore[import]
+except ImportError as exc:
+    raise ImportError(
+        "The ultralytics package is required. Install it with `pip install ultralytics`."
+    ) from exc
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Quick MiDaS relative-depth camera test.")
@@ -77,9 +84,55 @@ def colorize_depth(depth_map):
     return cv2.applyColorMap(depth_uint8, cv2.COLORMAP_MAGMA)
 
 
+def load_yolo(model_path):
+    yolo_model = YOLO(str(model_path))
+    return yolo_model
+
+
+def draw_yolo_boxes(frame, yolo_model, depth_map=None):
+    results = yolo_model(frame)
+    for result in results:
+        boxes = result.boxes.xyxy.cpu().numpy()
+        classes = result.boxes.cls.cpu().numpy()
+        for box, cls in zip(boxes, classes):
+            x1, y1, x2, y2 = map(int, box[:4])
+            label = result.names[int(cls)]
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            if depth_map is not None:
+                center_x = np.clip((x1 + x2) // 2, 0, depth_map.shape[1] - 1)
+                center_y = np.clip((y1 + y2) // 2, 0, depth_map.shape[0] - 1)
+                depth_value = float(depth_map[center_y, center_x])
+                label = f"{label}: {depth_value:.2f}mm"
+
+            text = label
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.6
+            font_thickness = 2
+            text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
+            text_x = x1
+            text_y = max(y1 - 10, text_size[1] + 10)
+            rect_x1 = text_x - 5
+            rect_y1 = text_y - text_size[1] - 5
+            rect_x2 = text_x + text_size[0] + 5
+            rect_y2 = text_y + 5
+
+            cv2.rectangle(frame, (rect_x1, rect_y1), (rect_x2, rect_y2), (0, 255, 0), -1)
+            cv2.putText(
+                frame,
+                text,
+                (text_x, text_y),
+                font,
+                font_scale,
+                (0, 0, 0),
+                font_thickness,
+            )
+
+
 def run_camera(camera_index, model_type, device_name):
     device = get_device(device_name)
     model, transform = load_midas(model_type, device)
+    yolo_model = load_yolo(PROJECT_ROOT / "yolo11s.pt")
     camera = cv2.VideoCapture(camera_index)
 
     if not camera.isOpened():
@@ -93,6 +146,9 @@ def run_camera(camera_index, model_type, device_name):
 
             depth_map = estimate_depth(frame, model, transform, device)
             depth_preview = colorize_depth(depth_map)
+
+            # Run YOLO detection and overlay boxes with depth
+            draw_yolo_boxes(frame, yolo_model, depth_map)
 
             cv2.imshow("Camera", frame)
             cv2.imshow("MiDaS Relative Depth", depth_preview)

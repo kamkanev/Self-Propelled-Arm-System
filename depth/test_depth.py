@@ -71,27 +71,26 @@ yolo_with_distance = cv2.imread(image_path)
 # Add YOLO detections and depth information to the copy
 for x1, y1, x2, y2 in person_boxes:
     # Draw bounding box
-    cv2.rectangle(yolo_with_distance, (x1, y1), (x2, y2), (0, 255, 0), 2)
-    
-    # Extract depth values within the bounding box
-    box_depth = depth_map[y1:y2, x1:x2]
-    
-    # Calculate average depth and convert to distance in meters
-    # MiDaS outputs inverse depth, so we take the reciprocal and scale
-    avg_depth = np.mean(box_depth)
-    distance_m = 1.0 / (avg_depth + 1e-6)  # Avoid division by zero
-    
-    # Display distance on the image
-    text = f"Distance: {distance_m:.2f}m"
-    cv2.putText(
-        yolo_with_distance,
-        text,
-        (x1, y1 - 10),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (0, 255, 0),
-        2,
-    )
+    center_x = (x1 + x2) // 2
+    center_y = (y1 + y2) // 2
+
+    depth_value = depth_map[center_y, center_x]
+
+    text = f"Depth: {depth_value:.2f}mm"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 1.2
+    font_thickness = 2
+    text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
+
+    text_x = x1
+    text_y = y1 - 10
+    rect_x1 = text_x - 5
+    rect_y1 = text_y - text_size[1] - 10
+    rect_x2 = text_x + text_size[0] + 5
+    rect_y2 = text_y + 5
+
+    cv2.rectangle(yolo_with_distance, (rect_x1, rect_y1), (rect_x2, rect_y2), (0, 255, 0), -1)
+    cv2.putText(yolo_with_distance, text, (text_x, text_y), font, font_scale, (0, 0, 0), font_thickness)
 
 cv2.imshow("YOLO Detection with Distance", yolo_with_distance)
 cv2.waitKey(0)
