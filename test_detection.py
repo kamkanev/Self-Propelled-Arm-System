@@ -8,8 +8,11 @@ os.environ.setdefault(
     "MPLCONFIGDIR",
     str(PROJECT_ROOT / ".cache" / "matplotlib"),
 )
+os.environ.setdefault("TORCH_HOME", str(PROJECT_ROOT / ".cache" / "torch"))
 
 import cv2
+
+from depth.depth_perseption import colorize_depth, estimate_depth, get_device, load_midas
 
 try:
     from ultralytics import YOLO  # type: ignore[import]
@@ -18,7 +21,7 @@ except ImportError as exc:
         "The ultralytics package is required. Install it with `pip install ultralytics`."
     ) from exc
 
-DEFAULT_MODEL_PATH = PROJECT_ROOT / "best.pt"
+DEFAULT_MODEL_PATH = PROJECT_ROOT / "yolo11s.pt"
 
 
 def parse_args():
@@ -27,7 +30,7 @@ def parse_args():
         "--model",
         type=Path,
         default=DEFAULT_MODEL_PATH,
-        help="Path to a YOLO .pt file or a directory containing one. Default: best.pt.",
+        help="Path to a YOLO .pt file or a directory containing one. Default: yolo11s.pt.",
     )
     parser.add_argument(
         "--camera",
@@ -40,6 +43,18 @@ def parse_args():
         type=float,
         default=0.5,
         help="Minimum confidence required to display a detection. Default: 0.5.",
+    )
+    parser.add_argument(
+        "--depth-model",
+        default="MiDaS_small",
+        choices=("MiDaS_small", "DPT_Hybrid", "DPT_Large"),
+        help="MiDaS depth model to use. Default: MiDaS_small.",
+    )
+    parser.add_argument(
+        "--depth-device",
+        default="auto",
+        choices=("auto", "cpu", "cuda"),
+        help="Device for MiDaS depth. Default: auto.",
     )
     return parser.parse_args()
 
@@ -62,8 +77,7 @@ def resolve_model_path(model_path):
 
     raise RuntimeError(
         f"No YOLO .pt model found at {model_path}. "
-        "Train a model first, then place best.pt in the project root or pass "
-        "--model path/to/best.pt."
+        "Place yolo11s.pt in the project root or pass --model path/to/model.pt."
     )
 
 
@@ -100,6 +114,8 @@ def main():
     args = parse_args()
     model_path = resolve_model_path(args.model)
     yolo_model = YOLO(str(model_path))
+    depth_device = get_device(args.depth_device)
+    depth_model, depth_transform = load_midas(args.depth_model, depth_device)
     camera = cv2.VideoCapture(args.camera)
 
     if not camera.isOpened():
@@ -113,8 +129,11 @@ def main():
 
             results = yolo_model(frame, conf=args.confidence, verbose=False)
             draw_detections(frame, results, args.confidence)
+            depth_map = estimate_depth(frame, depth_model, depth_transform, depth_device)
+            depth_preview = colorize_depth(depth_map)
 
             cv2.imshow("Paper Detection", frame)
+            cv2.imshow("MiDaS Relative Depth", depth_preview)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
     finally:
