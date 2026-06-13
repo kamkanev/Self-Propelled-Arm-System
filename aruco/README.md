@@ -43,6 +43,26 @@ python3 gui_generator.py
 - Use the GUI controls to select `aruco_type`, change the marker `id`, and generate the marker.
 - The generated marker is previewed in the window and saved to `markers/`.
 
+### `aruco_detection.py`
+
+This is an experimental marker detection and distance estimation script.
+
+- Captures frames from the camera.
+- Detects ArUco markers with the supported OpenCV detector API.
+- Calculates centroids and approximate marker distance in pixels.
+
+> This script is still in progress and may not work reliably yet.
+
+### `pose_estimation.py`
+
+This is an experimental pose estimation script.
+
+- Captures frames from the camera.
+- Detects ArUco markers using `ArucoDetector`.
+- Uses `solvePnP` to estimate marker pose and draws a 3D axis.
+
+> This script is also a work in progress and may not be fully stable yet.
+
 ## Output
 
 Generated markers are saved in the `markers/` folder.
