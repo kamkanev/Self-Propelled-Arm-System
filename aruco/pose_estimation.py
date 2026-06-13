@@ -102,6 +102,10 @@ if not cap.isOpened():
 matrix_coefficients = np.array([[800, 0, 320], [0, 800, 240], [0, 0, 1]], dtype=np.float32)
 distortion_coefficients = np.zeros((5, 1), dtype=np.float32)
 
+aruco_dict = get_predefined_dictionary(aruco_type)
+parameters = cv2.aruco.DetectorParameters()
+detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
+
 while cap.isOpened():
     ret, image = cap.read()
 
@@ -109,12 +113,9 @@ while cap.isOpened():
         print("Can't receive frame (stream end?). Exiting ...")
         break
 
-    output_image = estimate_pose(image, aruco_type, matrix_coefficients, distortion_coefficients)
+    corners, ids, rejected_img_points = detector.detectMarkers(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
+    output_image = aruco_display(corners, ids, rejected_img_points, image)
     cv2.imshow('Pose Estimation', output_image)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-
-cap.release()
-cv2.destroyAllWindows()
-
