@@ -49,12 +49,6 @@ Generated markers are saved in the `markers/` folder.
 
 ## Screenshots
 
-Screenshots of the GUI are available in the repository `screenshots/` folder:
-
-- `screenshots/aruco_gen_init.png` — initial generator view.
-- `screenshots/aruco_gen_ready.png` — preview and generated marker state.
-- `screenshots/detection.png` — example output from detection.
-
 ![ArUco GUI init](../screenshots/aruco_gen_init.png)
 
 ![ArUco GUI ready](../screenshots/aruco_gen_ready.png)
