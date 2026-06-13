@@ -5,6 +5,7 @@ torchvision==0.27.0+cpu
 timm
 ultralytics
 opencv-python
+pygame
 typeguard
 label-studio
 pip
