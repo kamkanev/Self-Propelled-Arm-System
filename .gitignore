@@ -8,3 +8,4 @@ runs/
 .env
 paper_detect/
 !paper_detect/runs/
+aruco/calib_images/

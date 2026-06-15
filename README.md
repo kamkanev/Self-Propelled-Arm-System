@@ -62,6 +62,21 @@ Stop:
 
 Press `q` in the camera window.
 
+## Run ArUco Depth detection
+
+Before running ArUco detection, calibrate your camera first. See [aruco/README.md](aruco/README.md) for full calibration and setup instructions to generatew the required YAML file.
+
+From the repository root, run the ArUco detection script from the `aruco/` folder:
+
+```bash
+cd aruco
+python3 aruco_detection.py
+```
+
+![ArUco detection example](screenshots/aruco_detect.png)
+
+These scripts require a generated camera calibration YAML file and the physical ArUco marker size in millimeters.
+
 ## Auto-Label New Images
 
 Pre-label new images with the trained model, then review before training.

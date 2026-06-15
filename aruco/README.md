@@ -1,0 +1,69 @@
+# ArUco Marker Generator
+
+This folder contains tools to generate ArUco and AprilTag markers using OpenCV.
+
+## Requirements
+
+- Python
+- `numpy`
+- `opencv-python` or an OpenCV build with the `aruco` module
+- `pygame` for the GUI generator (required to run `gui_generator.py`)
+
+Install dependencies with pip, for example:
+
+```bash
+pip install numpy opencv-python pygame
+```
+
+## Scripts
+
+### `aruco_generator.py`
+
+Use this script to generate markers from the command line.
+
+- Change `aruco_type`, `tag_size`, and `id` inside the script to produce different markers.
+- Run:
+
+```bash
+python3 aruco_generator.py
+```
+
+This will generate a marker and save it to the `markers/` folder.
+
+### `gui_generator.py`
+
+Use this script to generate markers with a simple GUI.
+
+- Run:
+
+```bash
+python3 gui_generator.py
+```
+
+![ArUco GUI init](../screenshots/aruco_gen_init.png)
+
+- Use the GUI controls to select `aruco_type`, change the marker `id`, and generate the marker.
+- The generated marker is previewed in the window and saved to `markers/`.
+
+![ArUco GUI ready](../screenshots/aruco_gen_ready.png)
+
+### Calibration
+
+Both `aruco_detection.py` require camera calibration first.
+
+- Run `calibration.py` with the provided `chessboard.jpeg` example to capture calibration images.
+- Collect at least 15 different chessboard screenshots, similar to ![init calibration](../screenshots/calibration.jpg)
+- Then run the `generate_calib_file.py` to create the YAML calibration file.
+- Keep the generated YAML file available when running detection or pose estimation.
+- Also know the physical size of the ArUco marker in millimeters.
+
+### `aruco_detection.py`
+
+This script detects ArUco markers and estimates their position in the camera image.
+
+- It captures frames from the camera.
+- Detects markers using the supported OpenCV `ArucoDetector` API.
+- Computes centroids and approximate distance-based position information.
+- Requires a valid camera calibration file and the physical marker size.
+
+![ArUco Detection](../screenshots/aruco_detect.png)
