@@ -14,14 +14,14 @@ load your camera’s intrinsic matrix and distortion coefficients from a YAML fi
 """
 camera_matrix = np.array(calib["camera_matrix"])
 dist_coeffs = np.array(calib["dist_coeff"])
-marker_length = 0.026  # mm
+marker_length = 0.072  # 26 mm
 
 """
 DICT_4X4_50 is a predefined dictionary of ArUco markers.
 4x4 markers with 50 unique IDs.(16 bits per marker)
 parameters are the default detection parameters.
 """
-aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
 parameters = cv2.aruco.DetectorParameters()
 
 # create a detector instance with default parameters.
