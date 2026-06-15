@@ -40,8 +40,12 @@ Use this script to generate markers with a simple GUI.
 python3 gui_generator.py
 ```
 
+![ArUco GUI init](../screenshots/aruco_gen_init.png)
+
 - Use the GUI controls to select `aruco_type`, change the marker `id`, and generate the marker.
 - The generated marker is previewed in the window and saved to `markers/`.
+
+![ArUco GUI ready](../screenshots/aruco_gen_ready.png)
 
 ### Calibration
 
@@ -62,14 +66,4 @@ This script detects ArUco markers and estimates their position in the camera ima
 - Computes centroids and approximate distance-based position information.
 - Requires a valid camera calibration file and the physical marker size.
 
-## Output
-
-Generated markers are saved in the `markers/` folder.
-
-## Screenshots
-
-![ArUco GUI init](../screenshots/aruco_gen_init.png)
-
-![ArUco GUI ready](../screenshots/aruco_gen_ready.png)
-
-> Note: The GUI version is the easiest way to create markers without editing the script directly.
+![ArUco Detection](../screenshots/aruco_detect.png)
