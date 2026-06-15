@@ -49,11 +49,11 @@ python3 gui_generator.py
 
 ### Calibration
 
-Both `aruco_detection.py` and `pose_estimation.py` require camera calibration first.
+Both `aruco_detection.py` require camera calibration first.
 
 - Run `calibration.py` with the provided `chessboard.jpeg` example to capture calibration images.
 - Collect at least 15 different chessboard screenshots, similar to ![init calibration](../screenshots/calibration.jpg)
-- Then run the calibration generator script to create the YAML calibration file.
+- Then run the `generate_calib_file.py` to create the YAML calibration file.
 - Keep the generated YAML file available when running detection or pose estimation.
 - Also know the physical size of the ArUco marker in millimeters.
 
