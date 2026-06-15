@@ -43,25 +43,24 @@ python3 gui_generator.py
 - Use the GUI controls to select `aruco_type`, change the marker `id`, and generate the marker.
 - The generated marker is previewed in the window and saved to `markers/`.
 
+### Calibration
+
+Both `aruco_detection.py` and `pose_estimation.py` require camera calibration first.
+
+- Run `calibration.py` with the provided `chessboard.jpeg` example to capture calibration images.
+- Collect at least 15 different chessboard screenshots, similar to ![init calibration](../screenshots/calibration.jpg)
+- Then run the calibration generator script to create the YAML calibration file.
+- Keep the generated YAML file available when running detection or pose estimation.
+- Also know the physical size of the ArUco marker in millimeters.
+
 ### `aruco_detection.py`
 
-This is an experimental marker detection and distance estimation script.
+This script detects ArUco markers and estimates their position in the camera image.
 
-- Captures frames from the camera.
-- Detects ArUco markers with the supported OpenCV detector API.
-- Calculates centroids and approximate marker distance in pixels.
-
-> This script is still in progress and may not work reliably yet.
-
-### `pose_estimation.py`
-
-This is an experimental pose estimation script.
-
-- Captures frames from the camera.
-- Detects ArUco markers using `ArucoDetector`.
-- Uses `solvePnP` to estimate marker pose and draws a 3D axis.
-
-> This script is also a work in progress and may not be fully stable yet.
+- It captures frames from the camera.
+- Detects markers using the supported OpenCV `ArucoDetector` API.
+- Computes centroids and approximate distance-based position information.
+- Requires a valid camera calibration file and the physical marker size.
 
 ## Output
 
