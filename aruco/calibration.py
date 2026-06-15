@@ -11,7 +11,7 @@ SAVE_DIR = "calib_images"
 # Number of images, use at least 15-20 images
 NUM_IMAGES = 15   
 # How many inner corners per chessboard row and column, not squares (IMPORTANT !!!)
-CHESSBOARD_SIZE = (8, 6)   
+CHESSBOARD_SIZE = (8, 6)   #meaning the chessboard is 9 x 7 squares
 
 os.makedirs(SAVE_DIR, exist_ok=True)
 

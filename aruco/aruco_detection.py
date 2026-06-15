@@ -1,73 +1,100 @@
 import cv2
-from cv2 import aruco
 import numpy as np
+import yaml
 
-class MarkerDetectionSystem:
-    def __init__(self, marker_size_cm=18.7):
-        self.marker_size_cm = marker_size_cm
-        self.dictionary = aruco.getPredefinedDictionary(aruco.DICT_ARUCO_ORIGINAL)
-        self.parameters = cv2.aruco.DetectorParameters()
-        self.detector = cv2.aruco.ArucoDetector(self.dictionary, self.parameters)
-        self.detected_markers = {}
+# Load calibration data with Python's yaml
+with open(r"calibration.yaml") as f:
+    calib = yaml.safe_load(f)
 
-    def detect_markers(self, frame):
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = self.detector.detectMarkers(gray)
-        self.detected_markers = {}
-        if ids is not None:
-            ids = ids.flatten()
-            for i in range(len(ids)):
-                M = cv2.moments(corners[i][0])
-                if M["m00"] != 0:
-                    cX = int(M["m10"] / M["m00"])
-                    cY = int(M["m01"] / M["m00"])
-                    marker_info = {
-                        'ID': int(ids[i]),
-                        'Centroid': (cX, cY),
-                        'Corners': corners[i][0]
-                    }
-                    self.detected_markers[ids[i]] = marker_info
-        return self.detected_markers
+""" 
+load your camera’s intrinsic matrix and distortion coefficients from a YAML file
+- camera_matrix is the 3×3 intrinsic parameters matrix.
+- dist_coeffs holds lens distortion parameters.
+- marker_length is the side length of the ArUco marker in meters.
+"""
+camera_matrix = np.array(calib["camera_matrix"])
+dist_coeffs = np.array(calib["dist_coeff"])
+marker_length = 0.026  # mm
 
-    def calculate_distance(self, marker_size_pixels, cap_width):
-        return self.marker_size_cm * cap_width / marker_size_pixels
+"""
+DICT_4X4_50 is a predefined dictionary of ArUco markers.
+4x4 markers with 50 unique IDs.(16 bits per marker)
+parameters are the default detection parameters.
+"""
+aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+parameters = cv2.aruco.DetectorParameters()
 
-    def draw_markers(self, frame):
-        if self.detected_markers:
-            for marker_id, marker_info in self.detected_markers.items():
-                cX, cY = marker_info['Centroid']
-                cv2.circle(frame, (cX, cY), 5, (255, 0, 255), -1)
-                marker_size_pixels = np.mean([np.linalg.norm(marker_info['Corners'][j] - marker_info['Corners'][(j + 1) % 4]) for j in range(4)])
-                distance_to_marker_cm = self.calculate_distance(marker_size_pixels, frame.shape[1])
-                cv2.putText(frame, "Dist. to Marker {}: {:.2f} cm".format(marker_id, distance_to_marker_cm), (cX - 120, cY + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 1)
+# create a detector instance with default parameters.
+detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
 
-    def draw_connections(self, frame):
-        marker_ids = list(self.detected_markers.keys())
-        if len(marker_ids) >= 2:
-            for i in range(len(marker_ids) - 1):
-                for j in range(i + 1, len(marker_ids)):
-                    id1 = marker_ids[i]
-                    id2 = marker_ids[j]
-                    dist = np.linalg.norm(np.array(self.detected_markers[id1]['Centroid']) - np.array(self.detected_markers[id2]['Centroid']))
-                    cv2.putText(frame, "Dist. between {} and {}: {:.2f} cm".format(id1, id2, dist), (20, 40 + 20 * (len(self.detected_markers) + j + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 1)
+cap = cv2.VideoCapture(0)
 
-def main():
-    cap = cv2.VideoCapture(0)
-    mds = MarkerDetectionSystem()
+num=0
 
-    while True:
-        ret, frame = cap.read()
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
 
-        detected_markers = mds.detect_markers(frame)
-        mds.draw_markers(frame)
-        mds.draw_connections(frame)
+    # Detect markers in the frame with detectMarkers method
+    corners, ids, _ = detector.detectMarkers(frame)
+    """
+    Example output of corners:
+    (array([[[ 15., 339.],
+        [ 91., 334.],
+        [ 98., 404.],
+        [ 19., 414.]]], dtype=float32),)
+    """
 
-        cv2.imshow('frame', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+    if ids is not None and len(ids) > 0:
 
-    cap.release()
-    cv2.destroyAllWindows()
+        # Draw detected markers on the frame
+        cv2.aruco.drawDetectedMarkers(frame, corners, ids)
 
-if __name__ == "__main__":
-    main()
+        # Define the 3D coordinates of the marker corners in the marker's coordinate system
+        obj_points = np.array([
+            [-marker_length / 2,  marker_length / 2, 0],
+            [ marker_length / 2,  marker_length / 2, 0],
+            [ marker_length / 2, -marker_length / 2, 0],
+            [-marker_length / 2, -marker_length / 2, 0]
+        ], dtype=np.float32)
+
+        
+        for marker_corners in corners:
+            image_points = marker_corners[0].astype(np.float32)
+
+            """
+            solvePnP estimates the pose of a 3D object given its 3D points and corresponding 2D image points.
+            It returns the rotation vector (rvec) and translation vector (tvec).
+            """
+            retval, rvec, tvec = cv2.solvePnP(obj_points, image_points, camera_matrix, dist_coeffs)
+            
+            if retval:
+                # Draw the axis on the frame
+                cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, 0.03)
+                
+                # Extract the translation vector and calculate the distance
+                x, y, z = tvec.flatten()
+                distance = np.linalg.norm(tvec)
+               
+                # Print to terminal
+                print(f"X = {x:.3f} m, Y = {y:.3f} m, Z(depth) = {z:.3f} m, Distance = {distance:.3f} m")
+               
+                # Display on frame with different colors
+                org = (20, 40)  
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 0.7
+                thickness = 2
+                cv2.putText(frame, f"X = {x:.3f} m", (org[0], org[1]), font, font_scale, (0, 255, 0), thickness, cv2.LINE_AA)
+                cv2.putText(frame, f"Y = {y:.3f} m", (org[0], org[1]+30), font, font_scale, (255, 0, 0), thickness, cv2.LINE_AA)
+                cv2.putText(frame, f"Depth = {z:.3f} m", (org[0], org[1]+60), font, font_scale, (0, 0, 255), thickness, cv2.LINE_AA)
+                cv2.putText(frame, f"Dist = {distance:.3f} m", (org[0], org[1]+90), font, font_scale, (0, 255, 255), thickness, cv2.LINE_AA)
+
+    # Display the frame with detected markers and pose estimatio
+    cv2.imshow('ArUco Pose Estimation', frame)
+     
+    if cv2.waitKey(1) & 0xFF == 27:
+        break
+
+cap.release()
+cv2.destroyAllWindows()
