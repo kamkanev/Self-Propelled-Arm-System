@@ -6,6 +6,9 @@ ___
 - [Detailed Project Plan](Detailed%20Project%20Plan.md)
 - [Trello Todo List](https://trello.com/b/hB05vBUY/cps-project)
 
+## Integration demo code
+- [Demo Updated 16/6](https://github.com/kamkanev/Self-Propelled-Arm-System/blob/6afc67ae811cf1699f24ac46ae672f4a9c25f5da/robot_code/demo/depthnet_servo_decision_demo.ipynb)
+
 ## Install First
 
 - Python 3
