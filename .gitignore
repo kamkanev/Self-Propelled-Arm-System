@@ -9,3 +9,7 @@ runs/
 paper_detect/
 !paper_detect/runs/
 aruco/calib_images/
+robot_code/demo/new_model/
+robot_code/demo/yolo_signal_demo/best.pt
+robot_code/demo/**/__pycache__/
+robot_code/demo/LOCAL_DEVELOPMENT_NOTES.md
