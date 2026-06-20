@@ -66,4 +66,13 @@ This script detects ArUco markers and estimates their position in the camera ima
 - Computes centroids and approximate distance-based position information.
 - Requires a valid camera calibration file and the physical marker size.
 
+### Positions
+
+Rounded position limitations that work for normal camera and 4x4 codes.
+*(0,0) is center of the camera.*
+
+- X: from around 0.500 m to -0.500 m
+- Y: from around 0.500 m to -0.500 m
+- Z: from around 0 m to 1.0 m
+
 ![ArUco Detection](../screenshots/aruco_detect.png)
