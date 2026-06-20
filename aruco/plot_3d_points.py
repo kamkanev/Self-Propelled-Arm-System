@@ -7,6 +7,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".cache" / "matplotlib"))
 
 
+def to_camera_center_coordinates(position):
+    x, y, z = np.asarray(position, dtype=float)
+    return np.array([-x, y, z], dtype=float)
+
+
+def marker_positions_to_camera_center_coordinates(marker_positions):
+    return {
+        marker_id: to_camera_center_coordinates(position)
+        for marker_id, position in marker_positions.items()
+    }
+
+
 def distance_between_points(point_a, point_b):
     point_a = np.asarray(point_a, dtype=float)
     point_b = np.asarray(point_b, dtype=float)
@@ -82,18 +94,82 @@ def relative_vectors_from_point(points, reference_id):
     }
 
 
+def build_claw_guidance(marker_positions, claw_id):
+    relative_vectors = relative_vectors_from_point(marker_positions, claw_id)
+    guidance = {}
+
+    for marker_id, relative_vector in relative_vectors.items():
+        vector = relative_vector["move_claw_vector"]
+        unit_vector = relative_vector["move_claw_unit_vector"]
+
+        guidance[int(marker_id)] = {
+            "target_id": int(marker_id),
+            "claw_id": int(claw_id),
+            "distance_m": float(relative_vector["distance"]),
+            "move_claw_vector": vector.astype(float).tolist(),
+            "move_claw_unit_vector": unit_vector.astype(float).tolist(),
+            "yaw_degrees": float(relative_vector["yaw_degrees"]),
+            "yaw_sin": float(relative_vector["yaw_sin"]),
+            "yaw_cos": float(relative_vector["yaw_cos"]),
+            "yaw_tan": float(relative_vector["yaw_tan"]),
+            "pitch_degrees": float(relative_vector["pitch_degrees"]),
+            "pitch_sin": float(relative_vector["pitch_sin"]),
+            "pitch_cos": float(relative_vector["pitch_cos"]),
+            "pitch_tan": float(relative_vector["pitch_tan"]),
+            "angle_from_x_degrees": float(relative_vector["angle_from_x_degrees"]),
+            "angle_from_y_degrees": float(relative_vector["angle_from_y_degrees"]),
+            "angle_from_z_degrees": float(relative_vector["angle_from_z_degrees"]),
+            "move_claw_direction_text": relative_vector["move_claw_direction_text"],
+        }
+
+    return guidance
+
+
+def format_marker_pose(marker_id, position):
+    x, y, z = np.asarray(position, dtype=float)
+    distance = distance_between_points((0, 0, 0), position)
+    return f"ID = {marker_id}, X = {x:.3f} m, Y = {y:.3f} m, Z(depth) = {z:.3f} m, Distance = {distance:.3f} m"
+
+
+def format_claw_guidance(claw_guidance):
+    lines = []
+
+    for marker_id, guidance in claw_guidance.items():
+        vector = guidance["move_claw_vector"]
+        unit_vector = guidance["move_claw_unit_vector"]
+        lines.append(
+            f"Claw ID {guidance['claw_id']} -> ID {marker_id}: "
+            f"distance = {guidance['distance_m']:.3f} m, "
+            f"move claw vector = [{vector[0]:.3f}, {vector[1]:.3f}, {vector[2]:.3f}], "
+            f"move claw unit = [{unit_vector[0]:.3f}, {unit_vector[1]:.3f}, {unit_vector[2]:.3f}], "
+            f"yaw = {guidance['yaw_degrees']:.1f} deg "
+            f"(sin={guidance['yaw_sin']:.3f}, cos={guidance['yaw_cos']:.3f}, tan={guidance['yaw_tan']:.3f}), "
+            f"pitch = {guidance['pitch_degrees']:.1f} deg "
+            f"(sin={guidance['pitch_sin']:.3f}, cos={guidance['pitch_cos']:.3f}, tan={guidance['pitch_tan']:.3f}), "
+            f"move claw: {guidance['move_claw_direction_text']}"
+        )
+
+    return lines
+
+
 def direction_text(vector):
     dx, dy, dz = np.asarray(vector, dtype=float)
-    x_direction = "right" if dx > 0 else "left" if dx < 0 else "same-x"
+    x_direction = "left" if dx > 0 else "right" if dx < 0 else "same-x"
     y_direction = "down" if dy > 0 else "up" if dy < 0 else "same-y"
     z_direction = "forward/deeper" if dz > 0 else "back/closer" if dz < 0 else "same-z"
     return f"{x_direction}, {y_direction}, {z_direction}"
 
 
 class Aruco3DPlotter:
-    def __init__(self, title="ArUco 3D Points", pause_seconds=0.001):
+    def __init__(
+        self,
+        title="ArUco 3D Points",
+        pause_seconds=0.001,
+        camera_bounds=((-1.0, 1.0), (-1.0, 1.0), (0.0, 1.0)),
+    ):
         self.title = title
         self.pause_seconds = pause_seconds
+        self.camera_bounds = camera_bounds
         self.figure = None
         self.axes = None
         self.plt = None
@@ -156,10 +232,10 @@ class Aruco3DPlotter:
                 )
 
         self.axes.set_title(self.title)
-        self.axes.set_xlabel("X (m)")
-        self.axes.set_ylabel("Y (m)")
-        self.axes.set_zlabel("Z (m)")
-        self._set_equal_axes(points.values())
+        self.axes.set_xlabel("X (m, left + / right -)")
+        self.axes.set_ylabel("Y (m, down + / up -)")
+        self.axes.set_zlabel("Z (m, forward +)")
+        self._set_axes(points.values())
 
         self.figure.canvas.draw_idle()
         self.plt.pause(self.pause_seconds)
@@ -184,7 +260,14 @@ class Aruco3DPlotter:
         self.figure = self.plt.figure(self.title)
         self.axes = self.figure.add_subplot(111, projection="3d")
 
-    def _set_equal_axes(self, points):
+    def _set_axes(self, points):
+        if self.camera_bounds is not None:
+            x_bounds, y_bounds, z_bounds = self.camera_bounds
+            self.axes.set_xlim(x_bounds)
+            self.axes.set_ylim(y_bounds)
+            self.axes.set_zlim(z_bounds)
+            return
+
         points = np.array(list(points), dtype=float)
         center = points.mean(axis=0)
         point_range = np.ptp(points, axis=0)

@@ -3,10 +3,19 @@ import numpy as np
 import yaml
 
 try:
-    from plot_3d_points import Aruco3DPlotter, relative_vectors_from_point
+    from plot_3d_points import (
+        Aruco3DPlotter,
+        build_claw_guidance,
+        format_claw_guidance,
+        format_marker_pose,
+        to_camera_center_coordinates,
+    )
 except ImportError as exc:
     Aruco3DPlotter = None
-    relative_vectors_from_point = None
+    build_claw_guidance = None
+    format_claw_guidance = None
+    format_marker_pose = None
+    to_camera_center_coordinates = None
     print(f"3D plotting disabled: {exc}")
 
 # Load calibration data with Python's yaml
@@ -24,6 +33,15 @@ dist_coeffs = np.array(calib["dist_coeff"])
 marker_length = 0.020  # 20 mm
 claw_id = 1
 
+# Debug-only visualizer. Set this to False to disable the Matplotlib 3D plot
+# when running with models or other real-time code that should not be slowed down.
+ENABLE_3D_PLOT = True
+
+# Converts OpenCV pose coordinates into camera-centered debug coordinates:
+# center is (0, 0), left X is positive, right X is negative, down Y is positive,
+# up Y is negative, and Z is positive going forward from the camera.
+USE_CAMERA_CENTER_COORDINATES = True
+
 """
 DICT_4X4_50 is a predefined dictionary of ArUco markers.
 4x4 markers with 50 unique IDs.(16 bits per marker)
@@ -36,7 +54,7 @@ parameters = cv2.aruco.DetectorParameters()
 detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
 
 cap = cv2.VideoCapture(0)
-plotter = Aruco3DPlotter() if Aruco3DPlotter is not None else None
+plotter = Aruco3DPlotter() if ENABLE_3D_PLOT and Aruco3DPlotter is not None else None
 
 num=0
 
@@ -85,11 +103,16 @@ while True:
                 
                 # Extract the translation vector and calculate the distance
                 x, y, z = tvec.flatten()
-                distance = np.linalg.norm(tvec)
-                marker_positions[marker_id] = np.array([x, y, z])
+                marker_position = np.array([x, y, z])
+
+                if USE_CAMERA_CENTER_COORDINATES and to_camera_center_coordinates is not None:
+                    marker_position = to_camera_center_coordinates(marker_position)
+
+                marker_positions[marker_id] = marker_position
                
                 # Print to terminal
-                print(f"ID = {marker_id}, X = {x:.3f} m, Y = {y:.3f} m, Z(depth) = {z:.3f} m, Distance = {distance:.3f} m")
+                if format_marker_pose is not None:
+                    print(format_marker_pose(marker_id, marker_positions[marker_id]))
                
                 # Display on frame with different colors
                 # org = (20, 40)  
@@ -101,23 +124,11 @@ while True:
                 # cv2.putText(frame, f"Depth = {z:.3f} m", (org[0], org[1]+60), font, font_scale, (0, 0, 255), thickness, cv2.LINE_AA)
                 # cv2.putText(frame, f"Dist = {distance:.3f} m", (org[0], org[1]+90), font, font_scale, (0, 255, 255), thickness, cv2.LINE_AA)
 
-        if claw_id in marker_positions and relative_vectors_from_point is not None:
-            relative_vectors = relative_vectors_from_point(marker_positions, claw_id)
+        if claw_id in marker_positions and build_claw_guidance is not None:
+            claw_guidance = build_claw_guidance(marker_positions, claw_id)
 
-            for marker_id, relative_vector in relative_vectors.items():
-                vector = relative_vector["vector"]
-                unit_vector = relative_vector["unit_vector"]
-                print(
-                    f"Claw ID {claw_id} -> ID {marker_id}: "
-                    f"distance = {relative_vector['distance']:.3f} m, "
-                    f"move claw vector = [{vector[0]:.3f}, {vector[1]:.3f}, {vector[2]:.3f}], "
-                    f"move claw unit = [{unit_vector[0]:.3f}, {unit_vector[1]:.3f}, {unit_vector[2]:.3f}], "
-                    f"yaw = {relative_vector['yaw_degrees']:.1f} deg "
-                    f"(sin={relative_vector['yaw_sin']:.3f}, cos={relative_vector['yaw_cos']:.3f}, tan={relative_vector['yaw_tan']:.3f}), "
-                    f"pitch = {relative_vector['pitch_degrees']:.1f} deg "
-                    f"(sin={relative_vector['pitch_sin']:.3f}, cos={relative_vector['pitch_cos']:.3f}, tan={relative_vector['pitch_tan']:.3f}), "
-                    f"move claw: {relative_vector['move_claw_direction_text']}"
-                )
+            for line in format_claw_guidance(claw_guidance):
+                print(line)
 
         if plotter is not None:
             try:
