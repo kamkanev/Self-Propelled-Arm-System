@@ -21,6 +21,16 @@ DEFAULT_GRAB_PARAMS = {
     "ready_s3": -12,
     "ready_s4": 0,
     "ready_s5": 0,
+    "pick_s1": 0,
+    "pick_s2": 5,
+    "pick_s3": 18,
+    "pick_s4": -55,
+    "pick_s5": 0,
+    "lift_state_s1": 0,
+    "lift_state_s2": 0,
+    "lift_state_s3": 28,
+    "lift_state_s4": -55,
+    "lift_state_s5": 0,
     "pre_s2": 18,
     "pre_s3": -12,
     "reach_s2": 26,
@@ -255,6 +265,26 @@ class MotionPickupDemo(object):
             "close_2",
         )
 
+    def pick_state(self):
+        pose = [
+            (1, self.grab_value("pick_s1")),
+            (2, self.grab_value("pick_s2")),
+            (3, self.grab_value("pick_s3")),
+            (4, self.grab_value("pick_s4")),
+            (5, self.grab_value("pick_s5")),
+        ]
+        self.apply_pose("pick_state", pose, self.grab_value("arm_speed"))
+
+    def lift_state(self):
+        pose = [
+            (1, self.grab_value("lift_state_s1")),
+            (2, self.grab_value("lift_state_s2")),
+            (3, self.grab_value("lift_state_s3")),
+            (4, self.grab_value("lift_state_s4")),
+            (5, self.grab_value("lift_state_s5")),
+        ]
+        self.apply_pose("lift_state", pose, self.grab_value("arm_speed"))
+
     def grab_sequence_without_final_home(self):
         print("[flow] grab sequence using {}".format(GRAB_PARAM_PATH))
         self.ready_state()
@@ -270,11 +300,8 @@ class MotionPickupDemo(object):
             self.grab_value("arm_speed"),
         )
         self.close_gripper()
-        self.apply_pose(
-            "lift",
-            [(2, self.grab_value("lift_s2")), (3, self.grab_value("lift_s3"))],
-            self.grab_value("arm_speed"),
-        )
+        self.pick_state()
+        self.lift_state()
 
     def after_grab_pose(self):
         p = self.motion_params
