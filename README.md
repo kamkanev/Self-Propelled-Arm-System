@@ -1,6 +1,12 @@
 # Self-Propelled Arm System
 ___
 
+## Documentation
+
+The complete technical report can be found here:
+
+[📄 Download the Final Report (PDF)](FINAL_REPORT.pdf)
+
 ## Plans
 
 - [Detailed Project Plan](Detailed%20Project%20Plan.md)
