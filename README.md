@@ -7,6 +7,9 @@ The complete technical report can be found here:
 
 [📄 Download the Final Report (PDF)](FINAL_REPORT.pdf)
 
+## Labeled images for FT
+[see google doc link](https://drive.google.com/drive/folders/1hPvIm-8g-z-UAHF-hwR392S8lAuq4Fpj?usp=drive_link) Might require more manual filtering.
+
 ## Plans
 
 - [Detailed Project Plan](Detailed%20Project%20Plan.md)
