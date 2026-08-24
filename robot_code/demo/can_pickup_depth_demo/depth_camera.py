@@ -74,7 +74,7 @@ class DepthCamera:
         self.depth_array = cudaToNumpy(self.depth_field)
         self.camera = None
 
-    def start(self, warmup_frames=2):
+    def start(self, warmup_frames=2, max_warmup_attempts=20):
         print("[camera] starting JetBot Camera {}x{}".format(self.width, self.height))
         try:
             self.camera = self._camera_cls.instance(width=self.width, height=self.height)
@@ -86,16 +86,26 @@ class DepthCamera:
         time.sleep(1.0)
 
         done = 0
-        while done < warmup_frames:
-            frame = self.read_frame()
-            if frame is None:
-                print("[warmup] no camera frame")
-                time.sleep(0.2)
-                continue
-            self.process_frame(frame)
-            done += 1
-            print("[warmup] frame {}/{} processed".format(done, warmup_frames))
-            time.sleep(0.1)
+        attempts = 0
+        try:
+            while done < warmup_frames and attempts < max_warmup_attempts:
+                attempts += 1
+                frame = self.read_frame()
+                if frame is None:
+                    print("[warmup] no camera frame ({}/{})".format(attempts, max_warmup_attempts))
+                    time.sleep(0.2)
+                    continue
+                self.process_frame(frame)
+                done += 1
+                print("[warmup] frame {}/{} processed".format(done, warmup_frames))
+                time.sleep(0.1)
+        except Exception:
+            self.stop()
+            raise
+
+        if done < warmup_frames:
+            self.stop()
+            raise RuntimeError("camera warmup failed: no usable frame after {} attempts".format(attempts))
 
     def stop(self):
         if self.camera is None:

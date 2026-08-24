@@ -13,3 +13,5 @@ robot_code/demo/new_model/
 robot_code/demo/yolo_signal_demo/best.pt
 robot_code/demo/**/__pycache__/
 robot_code/demo/LOCAL_DEVELOPMENT_NOTES.md
+robot_code/demo/redbull/models/
+robot_code/demo/redbull/redbull_servo_positions_log.csv
