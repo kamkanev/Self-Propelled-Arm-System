@@ -1,0 +1,37 @@
+{
+  "paths": {
+    "project_root": ".",
+    "empirical_parameters": "empirical_parameters.json",
+    "assets": "assets",
+    "tests": "tests",
+    "legacy_params": "legacy_params",
+    "can_model_directory": "assets/models/detectnet_native_can",
+    "apriltag_image": "assets/bin_apriltag_36h11_id_0.png",
+    "logs": "logs",
+    "diagnostic_outputs": "diagnostic_outputs"
+  },
+  "runtime": {
+    "dry_run": {
+      "camera": true,
+      "base": true,
+      "arm": true
+    },
+    "max_pickups": 1,
+    "retry_limit": 2,
+    "loop_pause_seconds": 0.02
+  },
+  "camera": {
+    "depth_enabled": true
+  },
+  "detectors": {
+    "can": {
+      "enabled": true
+    }
+  },
+  "avoidance": {
+    "strategy": "disabled"
+  },
+  "arm": {
+    "verify_enabled": false
+  }
+}

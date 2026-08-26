@@ -1,0 +1,172 @@
+{
+  "camera": {
+    "width": 320,
+    "height": 240,
+    "depth_network": "fcn-mobilenet",
+    "observation_pause_seconds": 0.1,
+    "lens_roi_width": 0.12,
+    "lens_roi_height": 0.18,
+    "target_depth_roi": [0.42, 0.4, 0.58, 0.65]
+  },
+  "detectors": {
+    "can": {
+      "model_path": "assets/models/detectnet_native_can/can_ssd_mobilenet_v1.onnx",
+      "labels_path": "assets/models/detectnet_native_can/labels.txt",
+      "input_blob": "input_0",
+      "output_scores": "scores",
+      "output_boxes": "boxes",
+      "class_id": 1,
+      "confidence_threshold": 0.2,
+      "tracking_confidence_threshold": 0.2,
+      "clustering_threshold": 0.3
+    },
+    "bin": {
+      "backend": "pupil_apriltags",
+      "dictionary": "DICT_APRILTAG_36h11",
+      "family": "tag36h11",
+      "tag_id": 0,
+      "marker_length_m": 0.08,
+      "calibration_yaml": ""
+    }
+  },
+  "navigation": {
+    "can": {
+      "search": {
+        "direction": "left",
+        "speed": 0.4,
+        "pulse_seconds": 0.25,
+        "timeout_seconds": 20.0
+      },
+      "align": {
+        "speed": 0.13,
+        "pulse_seconds": 0.08,
+        "tolerance_norm": 0.15,
+        "max_steps": 600,
+        "lost_frame_limit": 8
+      },
+      "approach": {
+        "speed": 0.5,
+        "pulse_seconds": 0.3,
+        "timeout_seconds": 15.0,
+        "max_pulses": 500,
+        "min_pulses": 0,
+        "lost_frame_limit": 4,
+        "steering_tolerance_norm": 0.12,
+        "steering_speed": 0.12,
+        "steering_pulse_seconds": 0.06,
+        "stop": {
+          "mode": "bbox_height",
+          "threshold": 0.36,
+          "depth_scale": 1.0
+        }
+      },
+      "near_align": {
+        "enabled": true,
+        "speed": 0.2,
+        "pulse_seconds": 0.15,
+        "tolerance_norm": 0.05,
+        "max_steps": 500,
+        "lost_frame_limit": 6
+      }
+    },
+    "bin": {
+      "search": {
+        "direction": "left",
+        "speed": 0.25,
+        "pulse_seconds": 0.12,
+        "timeout_seconds": 15.0
+      },
+      "align": {
+        "speed": 0.15,
+        "pulse_seconds": 0.18,
+        "tolerance_norm": 0.08,
+        "max_steps": 400,
+        "lost_frame_limit": 8
+      },
+      "approach": {
+        "speed": 0.5,
+        "pulse_seconds": 0.18,
+        "timeout_seconds": 15.0,
+        "max_pulses": 400,
+        "min_pulses": 0,
+        "lost_frame_limit": 5,
+        "steering_tolerance_norm": 0.1,
+        "steering_speed": 0.12,
+        "steering_pulse_seconds": 0.06,
+        "stop": {
+          "mode": "bbox_height",
+          "threshold": 0.15,
+          "depth_scale": 1.0
+        }
+      }
+    }
+  },
+  "avoidance": {
+    "roi": [0.35, 0.52, 0.65, 0.92],
+    "obstacle_depth": 1.2,
+    "clear_depth": 1.6,
+    "max_steps": 20,
+    "turn_speed": 0.16,
+    "turn_pulse_seconds": 0.12,
+    "forward_speed": 0.16,
+    "forward_pulse_seconds": 0.18,
+    "profile_row_start": 0.45,
+    "profile_row_end": 0.9,
+    "profile_columns": 80,
+    "smoothing_window": 5,
+    "discontinuity_threshold": 0.3,
+    "minimum_gap_columns": 6,
+    "heading_weight": 1.0,
+    "clearance_weight": 0.35,
+    "debug_overlay_path": "logs/tangentbug_latest.jpg"
+  },
+  "arm": {
+    "speed": 85,
+    "gripper_speed": 120,
+    "servo_settle_seconds": 0.35,
+    "gripper_open": 0,
+    "gripper_close": -40,
+    "pickup_start_delay_seconds": 2.0,
+    "push": {
+      "speed": 0.1,
+      "seconds": 7.0,
+      "post_lock_seconds": 5.0
+    },
+    "verify_depth": 1.4,
+    "position_wait": {
+      "enabled": true,
+      "stability_delta_raw": 3,
+      "timeout_seconds": 10.0,
+      "min_wait_seconds": 0.5,
+      "poll_seconds": 0.15,
+      "stable_samples": 2
+    },
+    "poses": {
+      "safe_home": {
+        "angles": {"s1": -16, "s2": 0, "s3": 0, "s4": 0, "s5": 0},
+        "order": [5, 4, 3, 2, 1],
+        "pause_seconds": 0.6
+      },
+      "arm_down": {
+        "angles": {"s1": -16, "s2": 105, "s3": 45, "s4": 0, "s5": 0},
+        "order": [5, 4, 3, 2, 1],
+        "pause_seconds": 0.6
+      },
+      "grab": {
+        "angles": {"s1": -16, "s2": 105, "s3": 45, "s4": -40, "s5": 0},
+        "order": [5, 4, 3, 2, 1],
+        "pause_seconds": 0.6
+      },
+      "carry": {
+        "angles": {"s1": -16, "s2": 60, "s3": 45, "s4": -40, "s5": 0},
+        "order": [5, 4, 3, 2, 1],
+        "pause_seconds": 0.6
+      },
+      "release": {
+        "angles": {"s1": -16, "s2": 60, "s3": 45, "s4": 0, "s5": 0},
+        "order": [5, 4, 3, 2, 1],
+        "pause_seconds": 0.6
+      }
+    }
+  }
+}
