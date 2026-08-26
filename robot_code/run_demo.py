@@ -3,7 +3,7 @@ from __future__ import print_function
 import argparse
 import json
 
-from demo_core import DemoRuntime, load_config
+from demo_core import DemoStateMachine, load_config
 from demo_core.logging_utils import TeeLogger, default_log_path
 
 
@@ -38,7 +38,7 @@ def run(args):
     if args.validate_only:
         print("[demo] configuration valid")
         return 0
-    runtime = DemoRuntime(config)
+    runtime = DemoStateMachine(config)
     return 0 if runtime.run(max_ticks=args.max_ticks) else 1
 
 

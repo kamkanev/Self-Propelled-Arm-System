@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-from .state_machine import MissionServices
+from .state_machine import RobotComponents
 
 
 class DemoDiagnostics(object):
@@ -8,7 +8,7 @@ class DemoDiagnostics(object):
 
     def __init__(self, config, services=None):
         self.config = config
-        self.services = services or MissionServices.from_config(config)
+        self.services = services or RobotComponents.from_config(config)
 
     def start_camera(self):
         if self.services.depth.depth is None:

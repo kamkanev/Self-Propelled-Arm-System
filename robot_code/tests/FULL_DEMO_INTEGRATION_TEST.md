@@ -1,6 +1,6 @@
 # Full Demo Integration Test
 
-`tests/full_demo_integration_test.ipynb` is a thin board-side wrapper around production `DemoRuntime`. It deliberately has no parameter widgets, preventing UI labels from drifting away from JSON keys.
+`tests/full_demo_integration_test.ipynb` is a thin board-side wrapper around production `DemoStateMachine`. It deliberately has no parameter widgets, preventing UI labels from drifting away from JSON keys.
 
 ## Iteration Loop
 

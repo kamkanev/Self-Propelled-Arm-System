@@ -30,7 +30,7 @@ Can model paths, confidence thresholds, and clustering are stored directly under
 
 ## Full Demo Integration
 
-Open `tests/full_demo_integration_test.ipynb`. It creates the same `DemoRuntime` used by `run_demo.py`.
+Open `tests/full_demo_integration_test.ipynb`. It creates the same `DemoStateMachine` used by `run_demo.py`.
 
 - Reload configuration reads both JSON files again and creates a fresh runtime.
 - Preflight starts the camera and checks depth/can/tag through `DemoDiagnostics`.

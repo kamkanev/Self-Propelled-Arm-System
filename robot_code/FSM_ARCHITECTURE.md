@@ -2,12 +2,12 @@
 
 ## Mission Model
 
-`DemoRuntime` is the only production coordinator. It owns a `MissionContext` containing the current target, vague target map, grabbed state, completed pickup count, retries, state timing, and last observation.
+`DemoStateMachine` is the only production coordinator. It owns a `MissionContext` containing the current target, vague target map, grabbed state, completed pickup count, retries, state timing, and last observation.
 
 The FSM definition and implementation are deliberately separated:
 
 - `demo_core/fsm_types.py` defines `MissionState`, `MissionEvent`, `TargetType`, and `MissionContext`. It contains mission data and bookkeeping but no transition table.
-- `demo_core/state_machine.py` defines `DemoRuntime`, the transition table, state handlers, finalization sequence, retries, and cleanup.
+- `demo_core/state_machine.py` defines `DemoStateMachine`, the transition table, state handlers, finalization sequence, retries, and cleanup.
 - `demo_core/navigation.py` implements target search, alignment, approach, and final verification actions requested by the state machine.
 - `demo_core/robot_control.py` translates those actions into base and servo commands.
 - `demo_core/depth_vision.py` manages the JetBot camera and depthNet lifecycle. `demo_core/perception.py` converts camera/model results into common target observations.
@@ -79,16 +79,16 @@ Search/alignment/approach timeouts enter `INTERMEDIATE`. The failed target memor
 ## Public API
 
 ```python
-from demo_core import DemoDiagnostics, DemoRuntime, load_config
+from demo_core import DemoDiagnostics, DemoStateMachine, load_config
 
 config = load_config()
 diagnostics = DemoDiagnostics(config)
-runtime = DemoRuntime(config)
+state_machine = DemoStateMachine(config)
 
-runtime.step_once()
-runtime.run()
-runtime.stop_all()
-runtime.release_camera()
+state_machine.step_once()
+state_machine.run()
+state_machine.stop_all()
+state_machine.release_camera()
 ```
 
 Configuration is merged as `empirical_parameters.json -> config.json -> overrides`. The old flat reference is not adapted or loaded.

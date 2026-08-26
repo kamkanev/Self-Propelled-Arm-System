@@ -13,7 +13,7 @@ from .navigation import StepOutcome, TargetNavigator
 from .tangentbug import DepthTangentBugPlanner
 
 
-class MissionServices(object):
+class RobotComponents(object):
     def __init__(self, base, arm, depth, can_detector, bin_detector):
         self.base = base
         self.arm = arm
@@ -32,7 +32,7 @@ class MissionServices(object):
         )
 
 
-class DemoRuntime(object):
+class DemoStateMachine(object):
     """Explicit event-driven implementation of the design-state machine."""
 
     TRANSITIONS = {
@@ -64,7 +64,7 @@ class DemoRuntime(object):
 
     def __init__(self, config, services=None, context=None):
         self.config = config
-        self.services = services or MissionServices.from_config(config)
+        self.services = services or RobotComponents.from_config(config)
         self.context = context or MissionContext()
         self.state = MissionState.IDLE
         self.stop_requested = False
@@ -141,13 +141,13 @@ class DemoRuntime(object):
         self.services.bin_detector.load()
         return True
 
-    def _initialize(self):
+    def _handle_initializing_state(self):
         self.services.depth.start()
         self._pose("safe_home")
         self.services.base.stop()
         return StepOutcome(MissionEvent.INITIALIZED)
 
-    def _plan(self):
+    def _handle_planning_state(self):
         max_pickups = int(self.config.get("runtime.max_pickups", 1))
         if not self.context.grabbed and self.context.completed_pickups >= max_pickups:
             return StepOutcome(MissionEvent.MISSION_COMPLETE)
@@ -157,7 +157,7 @@ class DemoRuntime(object):
             return StepOutcome(MissionEvent.TARGET_CACHED)
         return StepOutcome(MissionEvent.TARGET_REQUIRED)
 
-    def _verify_target(self):
+    def _handle_verify_target_state(self):
         observation = self.navigator.detect(self.context.target_type)
         if self.navigator._accepted(self.context.target_type, observation, tracking=True):
             self.context.remember_target(self.context.target_type, observation)
@@ -165,25 +165,25 @@ class DemoRuntime(object):
         self.context.forget_target(self.context.target_type)
         return StepOutcome(MissionEvent.TARGET_MISSING, observation)
 
-    def _search(self):
+    def _handle_searching_state(self):
         outcome = self.navigator.search_step(self.context.target_type)
         if outcome.event == MissionEvent.TARGET_FOUND:
             self.context.remember_target(self.context.target_type, outcome.observation)
         return outcome
 
-    def _align(self):
+    def _handle_aligning_state(self):
         outcome = self.navigator.align_step(self.context.target_type)
         if outcome.observation and outcome.observation.get("found"):
             self.context.remember_target(self.context.target_type, outcome.observation)
         return outcome
 
-    def _approach(self):
+    def _handle_approaching_state(self):
         outcome = self.navigator.approach_step(self.context.target_type)
         if outcome.observation and outcome.observation.get("found"):
             self.context.remember_target(self.context.target_type, outcome.observation)
         return outcome
 
-    def _final_verify(self):
+    def _handle_final_verify_state(self):
         outcome = self.navigator.final_verify_step(self.context.target_type)
         if outcome.observation and outcome.observation.get("found"):
             self.context.remember_target(self.context.target_type, outcome.observation)
@@ -227,7 +227,7 @@ class DemoRuntime(object):
             self.services.base.pulse(plan.action, settings["turn_speed"], settings["turn_pulse_seconds"], "tangentbug_turn")
         return StepOutcome()
 
-    def _avoid(self):
+    def _handle_avoiding_state(self):
         strategy = self.config.get("avoidance.strategy", "disabled")
         if strategy == "scripted":
             return self._scripted_avoidance()
@@ -236,7 +236,7 @@ class DemoRuntime(object):
         self.context.obstacle_found = False
         return StepOutcome(MissionEvent.PATH_CLEAR)
 
-    def _pickup(self):
+    def _run_pickup_sequence(self):
         arm = self.config.section("arm")
         delay = float(arm.get("pickup_start_delay_seconds", 0.0))
         arm_is_real = not self.config.get("runtime.dry_run.arm", True)
@@ -260,21 +260,21 @@ class DemoRuntime(object):
         print("[mission] completed_pickups={}".format(self.context.completed_pickups))
         return StepOutcome(MissionEvent.FINALIZED)
 
-    def _release(self):
+    def _run_release_sequence(self):
         self._pose("release")
         self._pose("safe_home")
         self.context.mark_release()
         self.context.forget_target(TargetType.BIN)
         return StepOutcome(MissionEvent.FINALIZED)
 
-    def _finalize(self):
+    def _handle_finalizing_state(self):
         if self.context.target_type == TargetType.CAN:
-            return self._pickup()
+            return self._run_pickup_sequence()
         if self.context.target_type == TargetType.BIN:
-            return self._release()
+            return self._run_release_sequence()
         return StepOutcome(MissionEvent.FAIL, reason="finalize without target")
 
-    def _intermediate(self):
+    def _handle_intermediate_state(self):
         failed_state = self.previous_state or MissionState.INTERMEDIATE
         count = self.context.retry(failed_state)
         limit = int(self.config.get("runtime.retry_limit", 2))
@@ -283,36 +283,36 @@ class DemoRuntime(object):
             return StepOutcome(MissionEvent.RETRY, reason="retry {}/{} after {}".format(count, limit, failed_state.value))
         return StepOutcome(MissionEvent.RETRY_EXHAUSTED, reason="retry limit exceeded after {}".format(failed_state.value))
 
-    def tick(self):
+    def _evaluate_current_state(self):
         self.interrupt_point()
         if self.state == MissionState.IDLE:
             return StepOutcome(MissionEvent.START)
         if self.state == MissionState.INITIALIZING:
-            return self._initialize()
+            return self._handle_initializing_state()
         if self.state == MissionState.PLANNING:
-            return self._plan()
+            return self._handle_planning_state()
         if self.state == MissionState.VERIFY_TARGET:
-            return self._verify_target()
+            return self._handle_verify_target_state()
         if self.state == MissionState.SEARCHING:
-            return self._search()
+            return self._handle_searching_state()
         if self.state == MissionState.ALIGNING:
-            return self._align()
+            return self._handle_aligning_state()
         if self.state == MissionState.APPROACHING:
-            return self._approach()
+            return self._handle_approaching_state()
         if self.state == MissionState.AVOIDING:
-            return self._avoid()
+            return self._handle_avoiding_state()
         if self.state == MissionState.FINAL_VERIFY:
-            return self._final_verify()
+            return self._handle_final_verify_state()
         if self.state == MissionState.FINALIZING:
-            return self._finalize()
+            return self._handle_finalizing_state()
         if self.state == MissionState.INTERMEDIATE:
-            return self._intermediate()
+            return self._handle_intermediate_state()
         return StepOutcome()
 
     def step_once(self):
         if self.state in (MissionState.DONE, MissionState.FAILED):
             return StepOutcome()
-        outcome = self.tick()
+        outcome = self._evaluate_current_state()
         if outcome.event is not None:
             self.transition(outcome.event, outcome.reason)
         return outcome

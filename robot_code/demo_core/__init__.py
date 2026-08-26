@@ -6,16 +6,16 @@ from .config import (
 )
 from .diagnostics import DemoDiagnostics
 from .fsm_types import MissionContext, MissionEvent, MissionState, TargetType
-from .state_machine import DemoRuntime, MissionServices
+from .state_machine import DemoStateMachine, RobotComponents
 
 
 __all__ = (
     "DemoConfig",
     "DemoDiagnostics",
-    "DemoRuntime",
+    "DemoStateMachine",
     "MissionContext",
     "MissionEvent",
-    "MissionServices",
+    "RobotComponents",
     "MissionState",
     "TargetType",
     "load_config",

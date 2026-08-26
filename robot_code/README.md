@@ -16,7 +16,7 @@ INIT -> PLAN -> SEARCH -> ALIGN -> APPROACH -> FINAL_VERIFY
 
 - `config.json`: project paths, dry-run switches, feature switches, score policy, retry policy, and avoidance strategy.
 - `empirical_parameters.json`: camera dimensions, model settings, thresholds, motion speeds, pulse lengths, ROIs, and arm poses.
-- `references/old_demo_params_reference.json`: the only retained flat legacy configuration. It is documentation only and is never loaded.
+- `legacy_params/old_demo_params_reference.json`: the only retained flat legacy configuration. It is documentation only and is never loaded.
 
 The merge order is:
 
@@ -38,7 +38,7 @@ Use the notebooks for incremental checks:
 
 - `tests/camera_network_diagnostics.ipynb`: camera, can model, AprilTag, depth, overlays, and model reuse.
 - `tests/full_demo_integration_test.ipynb`: production `DemoRuntime`, step-by-step execution, preflight, and full-run logging.
-- `tools/arm_sequence_tuning.ipynb`: direct editing/testing of the `arm` section in `empirical_parameters.json`.
+- `tuning_tools/arm_sequence_tuning.ipynb`: direct editing/testing of the `arm` section in `empirical_parameters.json`.
 
 Real hardware can be enabled together or independently:
 
@@ -74,4 +74,4 @@ AprilTag detection uses `pupil_apriltags` with `tag36h11`; it does not require a
 
 ## Logs And References
 
-Runtime logs are written under `logs/` and ignored by Git. Two curated legacy examples are retained under `references/logs/` to show a successful and a failed earlier run. See `PROJECT_STRUCTURE.md`, `FSM_ARCHITECTURE.md`, and `NOTEBOOK_PARAMETER_GUIDE.md` for detailed ownership and testing guidance.
+Runtime logs are written under `logs/` and ignored by Git. Two curated legacy examples are retained under `legacy_params/logs/` to show a successful and a failed earlier run. See `PROJECT_STRUCTURE.md`, `FSM_ARCHITECTURE.md`, and `tests/NOTEBOOK_PARAMETER_GUIDE.md` for detailed ownership and testing guidance.

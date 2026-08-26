@@ -10,4 +10,4 @@ git commit -m "Attach board demo failure log"
 git push
 ```
 
-Curated historical examples live in `references/logs/`; active diagnostics belong here.
+Curated historical examples live in `legacy_params/logs/`; active diagnostics belong here.

@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from demo_core import DemoRuntime, MissionEvent, MissionServices, MissionState, load_config
+from demo_core import DemoStateMachine, MissionEvent, MissionState, RobotComponents, load_config
 
 
 class FakeBase(object):
@@ -76,7 +76,7 @@ class FakeDetector(object):
         return 0.2
 
 
-class RuntimeTest(unittest.TestCase):
+class StateMachineTest(unittest.TestCase):
     def test_delivery_asset_paths_resolve_from_config_directory(self):
         config = load_config()
 
@@ -113,8 +113,8 @@ class RuntimeTest(unittest.TestCase):
         base = FakeBase()
         arm = FakeArm()
         depth = FakeDepth()
-        services = MissionServices(base, arm, depth, FakeDetector("can"), FakeDetector("bin_tag"))
-        runtime = DemoRuntime(config, services=services)
+        services = RobotComponents(base, arm, depth, FakeDetector("can"), FakeDetector("bin_tag"))
+        runtime = DemoStateMachine(config, services=services)
 
         self.assertTrue(runtime.run(max_ticks=100))
         self.assertEqual(runtime.state, MissionState.DONE)
@@ -127,15 +127,15 @@ class RuntimeTest(unittest.TestCase):
 
     def test_intermediate_retries_then_exhausts_limit(self):
         config = load_config(overrides={"runtime": {"retry_limit": 1}})
-        runtime = DemoRuntime(
+        runtime = DemoStateMachine(
             config,
-            services=MissionServices(
+            services=RobotComponents(
                 FakeBase(), FakeArm(), FakeDepth(), FakeDetector("can"), FakeDetector("bin_tag")
             ),
         )
         runtime.previous_state = MissionState.SEARCHING
-        first = runtime._intermediate()
-        second = runtime._intermediate()
+        first = runtime._handle_intermediate_state()
+        second = runtime._handle_intermediate_state()
         self.assertEqual(first.event, MissionEvent.RETRY)
         self.assertEqual(second.event, MissionEvent.RETRY_EXHAUSTED)
 
