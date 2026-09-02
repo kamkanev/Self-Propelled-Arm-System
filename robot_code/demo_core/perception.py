@@ -1,12 +1,13 @@
 import math
 import os
 import sys
+import threading
 import time
 
 import cv2
 import numpy as np
 
-from .depth_vision import CameraOnly, DepthCamera, setup_jetson_inference_paths
+from .depth_vision import CameraOnly, DepthCamera, setup_jetson_inference_paths, summarize_region
 
 
 def empty_detection(kind):
@@ -50,16 +51,51 @@ def bbox_center_result(kind, bbox, image_width, image_height, confidence=1.0, ex
 def tag_size_metrics(points, image_width, image_height):
     pts = np.asarray(points, dtype=np.float32).reshape(4, 2)
     edge_lengths = []
+    edge_midpoints = []
+    edge_vectors = []
     for index in range(4):
         delta = pts[(index + 1) % 4] - pts[index]
         edge_lengths.append(float(np.linalg.norm(delta)))
+        edge_midpoints.append((pts[(index + 1) % 4] + pts[index]) / 2.0)
+        edge_vectors.append(delta)
     edge_mean = float(np.mean(edge_lengths))
     normalizer = float(max(1, min(int(image_width), int(image_height))))
+    vertical = sorted(
+        [index for index, delta in enumerate(edge_vectors) if abs(float(delta[1])) >= abs(float(delta[0]))],
+        key=lambda index: float(edge_midpoints[index][0]),
+    )
+    horizontal = sorted(
+        [index for index, delta in enumerate(edge_vectors) if abs(float(delta[0])) > abs(float(delta[1]))],
+        key=lambda index: float(edge_midpoints[index][1]),
+    )
+    vertical_error = 0.0
+    horizontal_error = 0.0
+    if len(vertical) == 2:
+        left_length = edge_lengths[vertical[0]]
+        right_length = edge_lengths[vertical[1]]
+        vertical_error = (right_length - left_length) / max(1.0, (right_length + left_length) / 2.0)
+    if len(horizontal) == 2:
+        top_length = edge_lengths[horizontal[0]]
+        bottom_length = edge_lengths[horizontal[1]]
+        horizontal_error = (bottom_length - top_length) / max(1.0, (bottom_length + top_length) / 2.0)
+    angle_errors = []
+    for index in range(4):
+        before = pts[(index - 1) % 4] - pts[index]
+        after = pts[(index + 1) % 4] - pts[index]
+        denominator = float(np.linalg.norm(before) * np.linalg.norm(after))
+        if denominator <= 1e-6:
+            angle_errors.append(90.0)
+            continue
+        cosine = max(-1.0, min(1.0, float(np.dot(before, after)) / denominator))
+        angle_errors.append(abs(math.degrees(math.acos(cosine)) - 90.0))
     return {
         "corners": [[float(x), float(y)] for x, y in pts],
         "edge_lengths_px": edge_lengths,
         "edge_length_px": edge_mean,
         "edge_length_norm": edge_mean / normalizer,
+        "vertical_edge_error": float(vertical_error),
+        "horizontal_edge_error": float(horizontal_error),
+        "max_corner_angle_error_deg": float(max(angle_errors)),
     }
 
 
@@ -68,6 +104,7 @@ class CanDetector(object):
         self.config = config
         self.settings = config.section("detectors")["can"]
         self.net = None
+        self.dry_run_target_available = True
         self.backend = "detectnet_native"
         self._cuda_from_numpy = None
 
@@ -78,6 +115,7 @@ class CanDetector(object):
     def reset(self):
         self.net = None
         self._cuda_from_numpy = None
+        self.dry_run_target_available = True
 
     def load(self):
         if not self.settings.get("enabled", True):
@@ -124,29 +162,53 @@ class CanDetector(object):
         ))
 
     def detect(self, frame):
+        detections = self.detect_all(frame)
+        if not detections:
+            return empty_detection("can")
+        best = max(detections, key=lambda detection: float(detection["confidence"]))
+        print(
+            "[can] backend={} confidence={:.3f} class_id={} center=({:.1f},{:.1f}) error_x={:.3f} bbox={}".format(
+                best.get("backend", self.backend),
+                best["confidence"],
+                best.get("class_id", int(self.settings.get("class_id", 1))),
+                best["center_x"],
+                best["center_y"],
+                best["error_x"],
+                best["bbox"],
+            )
+        )
+        return best
+
+    def detect_all(self, frame):
         if frame is None:
             print("[can] no frame")
-            return empty_detection("can")
+            return []
         if self.config.get("runtime.dry_run.camera", True):
+            if not self.dry_run_target_available:
+                return []
             height, width = frame.shape[:2]
-            return bbox_center_result(
+            return [bbox_center_result(
                 "can",
                 [width * 0.35, height * 0.15, width * 0.65, height * 0.85],
                 width,
                 height,
                 confidence=0.95,
                 extra={"simulated": True},
-            )
+            )]
         if self.net is None:
             if self.settings.get("enabled", True):
                 self.load()
             else:
                 print("[can] placeholder: no target detection available")
-                return empty_detection("can")
+                return []
 
-        return self._detect_detectnet_native(frame)
+        return self._detect_all_native(frame)
 
-    def _detect_detectnet_native(self, frame):
+    def mark_dry_run_target_consumed(self):
+        if self.config.get("runtime.dry_run.camera", True):
+            self.dry_run_target_available = False
+
+    def _detect_all_native(self, frame):
         rgb = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         detections = self.net.Detect(self._cuda_from_numpy(rgb))
         expected_class = int(self.settings.get("class_id", 1))
@@ -157,35 +219,33 @@ class CanDetector(object):
         ]
         if not detections:
             print("[can] backend=detectnet_native no detections")
-            return empty_detection("can")
+            return []
 
-        best = max(detections, key=lambda detection: float(detection.Confidence))
         image_height, image_width = frame.shape[:2]
-        result = bbox_center_result(
-            "can",
-            [best.Left, best.Top, best.Right, best.Bottom],
-            image_width,
-            image_height,
-            confidence=best.Confidence,
-            extra={
-                "class_id": int(best.ClassID),
-                "count": len(detections),
-                "raw_outputs": False,
-                "backend": self.backend,
-            },
-        )
+        results = []
+        for detection in detections:
+            results.append(bbox_center_result(
+                "can",
+                [detection.Left, detection.Top, detection.Right, detection.Bottom],
+                image_width,
+                image_height,
+                confidence=detection.Confidence,
+                extra={
+                    "class_id": int(detection.ClassID),
+                    "count": len(detections),
+                    "raw_outputs": False,
+                    "backend": self.backend,
+                },
+            ))
         print(
-            "[can] backend={} confidence={:.3f} class_id={} center=({:.1f},{:.1f}) error_x={:.3f} bbox={}".format(
-                result["backend"],
-                result["confidence"],
-                result["class_id"],
-                result["center_x"],
-                result["center_y"],
-                result["error_x"],
-                result["bbox"],
+            "[can] backend={} detections={} best_confidence={:.3f}".format(
+                self.backend,
+                len(results),
+                max(float(result["confidence"]) for result in results),
             )
         )
-        return result
+        return results
+
 
 class AprilTagBinDetector(object):
     def __init__(self, config):
@@ -292,13 +352,21 @@ class AprilTagBinDetector(object):
             return empty_detection("bin_tag")
         if self.config.get("runtime.dry_run.camera", True):
             height, width = frame.shape[:2]
+            points = np.array([
+                [width * 0.35, height * 0.25],
+                [width * 0.65, height * 0.25],
+                [width * 0.65, height * 0.75],
+                [width * 0.35, height * 0.75],
+            ], dtype=np.float32)
+            extra = {"id": int(self.settings["tag_id"]), "simulated": True}
+            extra.update(tag_size_metrics(points, width, height))
             return bbox_center_result(
                 "bin_tag",
-                [width * 0.35, height * 0.15, width * 0.65, height * 0.85],
+                [width * 0.35, height * 0.25, width * 0.65, height * 0.75],
                 width,
                 height,
                 confidence=1.0,
-                extra={"id": int(self.settings["tag_id"]), "simulated": True},
+                extra=extra,
             )
         self.load()
         if self.backend == "pupil_apriltags":
@@ -444,12 +512,29 @@ class DepthSensor(object):
         self.camera_settings = config.section("camera")
         self.avoidance_settings = config.section("avoidance")
         self.depth = None
+        self._inference_lock = threading.RLock()
+        self._frame_lock = threading.Lock()
+        self.latest_lens_stats = None
 
-    def start(self):
+    def start(self, camera_only=False):
         if self.config.get("runtime.dry_run.camera", True):
             print("[depth] camera dry-run")
             return
-        if bool(self.camera_settings.get("depth_enabled", True)):
+
+        depth_requested = bool(self.camera_settings.get("depth_enabled", True)) and not camera_only
+        if self.depth is not None:
+            if camera_only:
+                print("[camera] already started depth_enabled={}".format(self.is_depth_available()))
+                return
+            if self.is_depth_available() == depth_requested:
+                print("[camera] already started depth_enabled={}".format(self.is_depth_available()))
+                return
+            print("[camera] switching depth_enabled={} -> {}".format(
+                self.is_depth_available(), depth_requested
+            ))
+            self.stop()
+
+        if depth_requested:
             self.depth = DepthCamera(
                 width=int(self.camera_settings["width"]),
                 height=int(self.camera_settings["height"]),
@@ -467,21 +552,25 @@ class DepthSensor(object):
         return bool(self.depth is not None and getattr(self.depth, "depth_enabled", False))
 
     def read_frame(self):
-        if self.depth is None:
-            if self.config.get("runtime.dry_run.camera", True):
-                return np.zeros(
-                    (int(self.camera_settings["height"]), int(self.camera_settings["width"]), 3),
-                    dtype=np.uint8,
-                )
-            return None
-        return self.depth.read_frame()
+        with self._frame_lock:
+            if self.depth is None:
+                if self.config.get("runtime.dry_run.camera", True):
+                    return np.zeros(
+                        (int(self.camera_settings["height"]), int(self.camera_settings["width"]), 3),
+                        dtype=np.uint8,
+                    )
+                return None
+            frame = self.depth.read_frame()
+            return None if frame is None else np.array(frame, copy=True)
 
     def stop(self):
-        if self.depth is not None:
-            try:
-                self.depth.stop()
-            finally:
-                self.depth = None
+        with self._inference_lock:
+            with self._frame_lock:
+                if self.depth is not None:
+                    try:
+                        self.depth.stop()
+                    finally:
+                        self.depth = None
         print("[depth] stop")
 
     def _roi(self, roi_name):
@@ -500,7 +589,8 @@ class DepthSensor(object):
             value = 2.0
             print("[depth] placeholder {} mean={:.3f}".format(roi_name, value))
             return {"mean": value, "min": value, "max": value, "roi": roi}
-        stats = self.depth.observe(region=tuple(roi))
+        with self._inference_lock:
+            stats = self.depth.observe(region=tuple(roi))
         return self._report_stats(roi_name, stats)
 
     def observe_frame(self, roi_name, frame):
@@ -512,10 +602,11 @@ class DepthSensor(object):
             value = 2.0
             print("[depth] placeholder {} mean={:.3f}".format(roi_name, value))
             return {"mean": value, "min": value, "max": value, "roi": roi}
-        stats = self.depth.observe(region=tuple(roi), frame=frame)
+        with self._inference_lock:
+            stats = self.depth.observe(region=tuple(roi), frame=frame)
         return self._report_stats(roi_name, stats)
 
-    def observe_center_frame(self, label, frame, center_x, center_y, width_ratio, height_ratio):
+    def observe_center_frame(self, label, frame, center_x, center_y, width_ratio, height_ratio, report=True):
         if self.depth is not None and not self.is_depth_available():
             print("[depth] {} unavailable; DepthNet disabled".format(label))
             return None
@@ -541,31 +632,78 @@ class DepthSensor(object):
             value = 2.0
             print("[depth] placeholder {} mean={:.3f} roi={}".format(label, value, roi))
             return {"mean": value, "min": value, "max": value, "roi": roi}
-        stats = self.depth.observe(region=roi, frame=frame)
+        with self._inference_lock:
+            stats = self.depth.observe(region=roi, frame=frame)
         if stats is not None:
             stats["roi"] = roi
             stats["source_center"] = (float(center_x), float(center_y))
-        return self._report_stats(label, stats)
+        return self._report_stats(label, stats) if report else stats
 
-    def observe_lens_center_frame(self, frame):
+    def observe_lens_center_frame(self, frame, report=True):
         if frame is None:
             print("[depth] lens_center_depth_roi missing frame")
             return None
         image_height, image_width = frame.shape[:2]
-        return self.observe_center_frame(
+        stats = self.observe_center_frame(
             "lens_center_depth_roi",
             frame,
             float(image_width) / 2.0,
             float(image_height) / 2.0,
             float(self.camera_settings.get("lens_roi_width", 0.12)),
             float(self.camera_settings.get("lens_roi_height", 0.18)),
+            report=report,
         )
+        if stats is not None:
+            self.latest_lens_stats = dict(stats)
+        return stats
+
+    def sample_lens_center_for_hud(self, frame):
+        """Return a fresh center-depth sample when DepthNet is idle, otherwise the cached sample."""
+        if frame is None or not self.is_depth_available():
+            return self.latest_lens_stats
+        if not self._inference_lock.acquire(False):
+            return self.latest_lens_stats
+        try:
+            return self.observe_lens_center_frame(frame, report=False)
+        finally:
+            self._inference_lock.release()
 
     def depth_map_frame(self, frame):
         """Return the full current depth field for local path planning."""
-        if not self.is_depth_available() or frame is None or self.depth is None:
+        if frame is None:
             return None
-        return self.depth.process_frame(frame)
+        if self.depth is None and self.config.get("runtime.dry_run.camera", True):
+            return np.full(frame.shape[:2], 2.0, dtype=np.float32)
+        if not self.is_depth_available() or self.depth is None:
+            return None
+        with self._inference_lock:
+            return self.depth.process_frame(frame)
+
+    def observe_center_depth_map(
+        self,
+        label,
+        depth_map,
+        center_x,
+        center_y,
+        image_width,
+        image_height,
+        width_ratio,
+        height_ratio,
+    ):
+        if depth_map is None or center_x is None or center_y is None:
+            return None
+        cx = max(0.0, min(1.0, float(center_x) / float(max(1, int(image_width)))))
+        cy = max(0.0, min(1.0, float(center_y) / float(max(1, int(image_height)))))
+        half_w = max(0.005, float(width_ratio) / 2.0)
+        half_h = max(0.005, float(height_ratio) / 2.0)
+        stats = summarize_region(
+            depth_map,
+            max(0.0, cx - half_w),
+            max(0.0, cy - half_h),
+            min(1.0, cx + half_w),
+            min(1.0, cy + half_h),
+        )
+        return self._report_stats(label, stats)
 
     def _report_stats(self, roi_name, stats):
         if stats is None:

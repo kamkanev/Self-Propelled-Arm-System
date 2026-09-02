@@ -1,4 +1,20 @@
 {
+  "base_motion_speed_profiles": {
+    "linear": {
+      "fast": 0.6,
+      "slow": 0.2
+    },
+    "turn": {
+      "fast": 0.3,
+      "slow": 0.15
+    }
+  },
+  "base_motion_command_scales": {
+    "forward": 1.0,
+    "backward": 1.0,
+    "left": 1.0,
+    "right": 1.0
+  },
   "camera": {
     "width": 320,
     "height": 240,
@@ -33,27 +49,28 @@
     "can": {
       "search": {
         "direction": "left",
-        "speed": 0.4,
-        "pulse_seconds": 0.25,
+        "speed": "turn.fast",
         "timeout_seconds": 20.0
       },
       "align": {
-        "speed": 0.13,
-        "pulse_seconds": 0.08,
+        "speed": "turn.slow",
         "tolerance_norm": 0.15,
         "max_steps": 600,
         "lost_frame_limit": 8
       },
       "approach": {
-        "speed": 0.5,
-        "pulse_seconds": 0.3,
+        "experimental_continuous": {
+          "enabled": true,
+          "speed": "linear.slow",
+          "duration_seconds": 1.0
+        },
+        "speed": "linear.fast",
         "timeout_seconds": 15.0,
         "max_pulses": 500,
         "min_pulses": 0,
         "lost_frame_limit": 4,
         "steering_tolerance_norm": 0.12,
-        "steering_speed": 0.12,
-        "steering_pulse_seconds": 0.06,
+        "steering_speed": "turn.slow",
         "stop": {
           "mode": "bbox_height",
           "threshold": 0.36,
@@ -62,8 +79,7 @@
       },
       "near_align": {
         "enabled": true,
-        "speed": 0.2,
-        "pulse_seconds": 0.15,
+        "speed": "turn.slow",
         "tolerance_norm": 0.05,
         "max_steps": 500,
         "lost_frame_limit": 6
@@ -72,43 +88,125 @@
     "bin": {
       "search": {
         "direction": "left",
-        "speed": 0.25,
-        "pulse_seconds": 0.12,
+        "speed": "turn.fast",
         "timeout_seconds": 15.0
       },
       "align": {
-        "speed": 0.15,
-        "pulse_seconds": 0.18,
+        "speed": "turn.slow",
         "tolerance_norm": 0.08,
         "max_steps": 400,
         "lost_frame_limit": 8
       },
       "approach": {
-        "speed": 0.5,
-        "pulse_seconds": 0.18,
+        "speed": "linear.fast",
         "timeout_seconds": 15.0,
         "max_pulses": 400,
         "min_pulses": 0,
         "lost_frame_limit": 5,
         "steering_tolerance_norm": 0.1,
-        "steering_speed": 0.12,
-        "steering_pulse_seconds": 0.06,
+        "steering_speed": "turn.slow",
         "stop": {
           "mode": "bbox_height",
           "threshold": 0.15,
           "depth_scale": 1.0
         }
+      },
+      "side_docking": {
+        "experimental": {
+          "enabled": true,
+          "supportive_turn_direction": "left",
+          "supportive_turn_speed": "turn.slow",
+          "supportive_turn_seconds": 0.75,
+          "center_tolerance_norm": 0.04,
+          "center_positive_drive_direction": "backward",
+          "drive_speed": "linear.slow",
+          "perspective_tolerance": 0.08,
+          "perspective_positive_turn_direction": "left",
+          "corner_angle_tolerance_deg": 8.0,
+          "turn_speed": "turn.slow",
+          "target_height_norm": 0.15,
+          "height_tolerance_norm": 0.02,
+          "standoff_correction_enabled": false,
+          "standoff_toward_turn_direction": "right",
+          "standoff_turn_speed": "turn.slow",
+          "standoff_turn_seconds": 0.35,
+          "standoff_drive_speed": "linear.slow",
+          "standoff_drive_seconds": 0.12,
+          "stable_frames": 5,
+          "lost_frame_limit": 10,
+          "max_steps": 300,
+          "timeout_seconds": 30.0
+        }
       }
     }
+  },
+  "vague_map": {
+    "bounds_m": {
+      "min_x": -1.0,
+      "max_x": 1.0,
+      "min_y": -1.0,
+      "max_y": 1.0
+    },
+    "initial_pose": {
+      "x_m": 0.0,
+      "y_m": 0.0,
+      "heading_rad": 0.0
+    },
+    "bin_marker_position": {
+      "x_m": 0.0,
+      "y_m": -0.75
+    },
+    "bin_docking_pose": {
+      "x_m": 0.0,
+      "y_m": -0.5,
+      "heading_rad": -1.57079632679
+    },
+    "bin_side_docking_pose": {
+      "x_m": 0.0,
+      "y_m": -0.5,
+      "heading_rad": 0.0
+    },
+    "patrol_waypoints": [
+      {"x_m": 0.5, "y_m": 0.0},
+      {"x_m": 0.5, "y_m": 0.5},
+      {"x_m": -0.5, "y_m": 0.5},
+      {"x_m": -0.5, "y_m": -0.5},
+      {"x_m": 0.5, "y_m": -0.5},
+      {"x_m": 0.5, "y_m": 0.0},
+      {"x_m": 0.0, "y_m": 0.0}
+    ],
+    "odometry": {
+      "linear_meters_per_speed_second": 1.0,
+      "linear_slip_factor": 1.0,
+      "angular_radians_per_speed_second": 3.14159265359
+    },
+    "navigation": {
+      "turn_speed": "turn.slow",
+      "turn_pulse_seconds": 0.12,
+      "forward_speed": "linear.slow",
+      "forward_pulse_seconds": 0.2,
+      "heading_tolerance_rad": 0.12,
+      "arrival_tolerance_m": 0.2,
+      "waypoint_tolerance_m": 0.15,
+      "timeout_seconds": 30.0,
+      "max_steps": 1000
+    },
+    "camera_horizontal_fov_rad": 1.0471975512,
+    "depth_to_distance_scale_m_per_unit": 1.0,
+    "incidental_can_min_center_y_norm": 0.45,
+    "can_merge_radius_m": 0.3,
+    "pickup_clear_radius_m": 0.3,
+    "can_depth_roi_width": 0.12,
+    "can_depth_roi_height": 0.18
   },
   "avoidance": {
     "roi": [0.35, 0.52, 0.65, 0.92],
     "obstacle_depth": 1.2,
     "clear_depth": 1.6,
     "max_steps": 20,
-    "turn_speed": 0.16,
+    "turn_speed": "turn.slow",
     "turn_pulse_seconds": 0.12,
-    "forward_speed": 0.16,
+    "forward_speed": "linear.slow",
     "forward_pulse_seconds": 0.18,
     "profile_row_start": 0.45,
     "profile_row_end": 0.9,
@@ -124,11 +222,9 @@
     "speed": 85,
     "gripper_speed": 120,
     "servo_settle_seconds": 0.35,
-    "gripper_open": 0,
-    "gripper_close": -40,
     "pickup_start_delay_seconds": 2.0,
     "push": {
-      "speed": 0.1,
+      "speed": "linear.slow",
       "seconds": 7.0,
       "post_lock_seconds": 5.0
     },
@@ -164,6 +260,16 @@
       },
       "release": {
         "angles": {"s1": -16, "s2": 60, "s3": 45, "s4": 0, "s5": 0},
+        "order": [5, 4, 3, 2, 1],
+        "pause_seconds": 0.6
+      },
+      "side_view_grabbing": {
+        "angles": {"s1": 70, "s2": 60, "s3": 45, "s4": -40, "s5": 0},
+        "order": [5, 4, 3, 2, 1],
+        "pause_seconds": 0.6
+      },
+      "side_view_release_low": {
+        "angles": {"s1": 70, "s2": 90, "s3": 40, "s4": 0, "s5": 0},
         "order": [5, 4, 3, 2, 1],
         "pause_seconds": 0.6
       }

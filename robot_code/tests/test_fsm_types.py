@@ -17,12 +17,13 @@ class MissionContextTest(unittest.TestCase):
         context = MissionContext()
         self.assertEqual(context.completed_pickups, 0)
 
-    def test_vague_map_tracks_target_type(self):
+    def test_visual_target_memory_does_not_create_map_entries(self):
         context = MissionContext()
         context.remember_target(TargetType.CAN, {"found": True})
-        self.assertIn("can", context.vague_map)
+        self.assertIsNone(context.vague_map)
+        self.assertTrue(context.last_observation["found"])
         context.forget_target(TargetType.CAN)
-        self.assertNotIn("can", context.vague_map)
+        self.assertIsNone(context.last_observation)
 
 
 if __name__ == "__main__":
