@@ -9,5 +9,5 @@
 8. The claw can reach 20 cm heightest, the redbull can has about 10cm height, the bin has about 5 cm height.
 9. The computer can render stably 10~15 FPS.
 
-10. ## Something worth to show(invariants)
-11. 1. tba
+## Something worth to show(invariants)
+1. tba
