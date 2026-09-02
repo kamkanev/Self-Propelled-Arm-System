@@ -1,5 +1,7 @@
 # Self-Propelled Arm System
 ___
+## Entry for codebase
+Simply under ./robot_code.
 
 ## Documentation
 
