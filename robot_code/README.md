@@ -1,32 +1,35 @@
 # JetTank Can Pickup Demo
 
-This directory is the self-contained delivery package for the JetTank demo. It has one production state machine, one command-line entry point, and two active JSON configuration files.
+`robot_code` is the self-contained runtime delivery for the JetTank can-pickup demo. It contains one production state machine, one command-line entry point, and two active JSON configuration files.
 
 ## Runtime Flow
 
 ```text
-INIT -> PLAN -> SEARCH -> ALIGN -> APPROACH -> FINAL_VERIFY
-     -> PICKUP -> PLAN -> SEARCH BIN -> ALIGN BIN -> APPROACH BIN
-     -> RELEASE -> DONE
+INITIALIZE -> PLAN -> SEARCH CAN -> PATROL WHEN NEEDED
+           -> ALIGN -> APPROACH -> FINAL VERIFY -> PICK UP
+           -> MAP NAVIGATE TO BIN -> VISUAL BIN DOCK -> RELEASE
+           -> NEXT MAPPED CAN OR PATROL WAYPOINT -> DONE
 ```
 
-`APPROACH` can be interrupted by the optional scripted or depth-profile TangentBug avoidance strategy. A failed search, alignment, approach, or final verification enters the bounded retry path; exhausted retries end in `FAILED`. Every terminal path calls `stop_all()`.
+The vague map uses command-based open-loop odometry for coarse travel. Visual detection is attempted before map motion and takes control as soon as the requested target is visible. Obstacle avoidance remains an independent approach-time behavior; the vague map does not plan around obstacles.
 
 ## Configuration
 
-- `config.json`: project paths, dry-run switches, feature switches, score policy, retry policy, and avoidance strategy.
-- `empirical_parameters.json`: camera dimensions, model settings, thresholds, motion speeds, pulse lengths, ROIs, and arm poses.
-- `legacy_params/old_demo_params_reference.json`: the only retained flat legacy configuration. It is documentation only and is never loaded.
+- `config.json` owns project paths, dry-run switches, mission policy, feature switches, retry limits, and the avoidance strategy.
+- `empirical_parameters.json` owns camera and detector settings, named base-speed profiles, per-direction command scales, navigation thresholds, vague-map calibration, and arm poses.
+- `legacy_params/old_demo_params_reference.json` is historical documentation and is never loaded by production code.
 
-The merge order is:
+Configuration is merged in this order:
 
 ```text
 empirical_parameters.json -> config.json -> command-line overrides
 ```
 
-## Board Workflow
+Base motion settings reference symbolic profiles such as `linear.fast` and `turn.slow`. `base_motion_command_scales` applies a separate positive multiplier to forward, backward, left, and right commands. All four multipliers default to `1.0`, so they do not change current behavior until calibrated.
 
-From the project root on the Jetson:
+## Validation And Execution
+
+From `robot_code` on the Jetson:
 
 ```bash
 python3 tests/board_first_checks.py
@@ -34,13 +37,7 @@ python3 run_demo.py --validate-only --no-log-file
 python3 run_demo.py --dry-run --no-log-file
 ```
 
-Use the notebooks for incremental checks:
-
-- `tests/camera_network_diagnostics.ipynb`: camera, can model, AprilTag, depth, overlays, and model reuse.
-- `tests/full_demo_integration_test.ipynb`: production `DemoRuntime`, step-by-step execution, preflight, and full-run logging.
-- `tuning_tools/arm_sequence_tuning.ipynb`: direct editing/testing of the `arm` section in `empirical_parameters.json`.
-
-Real hardware can be enabled together or independently:
+Hardware is dry-run by default. Enable only the required devices:
 
 ```bash
 python3 run_demo.py --real
@@ -48,30 +45,14 @@ python3 run_demo.py --camera-real --base-real
 python3 run_demo.py --camera-real --base-real --arm-real --avoidance tangentbug_depth
 ```
 
-Hardware is dry-run by default. Base actions are short pulses and `stop_all()` stops the base, returns the arm to `safe_home`, and releases the camera.
+Continuous motion is bounded by visual feedback, target-loss limits, arrival thresholds, and state timeouts. `stop_all()` stops the base, requests cooperative arm cancellation, returns the arm to `safe_home`, and releases the camera.
 
-## Models
+## Perception And Avoidance
 
-Can detection uses the standard jetson-inference `detectNet` API directly:
+Can detection uses the jetson-inference `detectNet` API with the bundled ONNX model and labels under `assets/models/detectnet_native_can/`. Bin detection uses `pupil_apriltags` with the `tag36h11` family and the configured tag ID.
 
-```text
-assets/models/detectnet_native_can/can_ssd_mobilenet_v1.onnx
-assets/models/detectnet_native_can/labels.txt
-input_0 -> scores + boxes
-confidence=0.20, clustering=0.30
-```
+`avoidance.strategy` supports `disabled`, `scripted`, and `tangentbug_depth`. The depth planner extracts obstacle contours, filters floor and wide-wall geometry, selects a visible tangent side, and emits incremental motion decisions. It is a local reactive planner, not metric localization or a complete global TangentBug implementation.
 
-Run the first Nano image smoke test before enabling base or arm motion:
+## References
 
-```bash
-python3 tests/validate_can_detectnet_image.py assets/samples/can1.jpg \
-  --output diagnostic_outputs/detectnet_native_can.jpg
-```
-
-There is no runtime backend switch or custom TFOD/PyCUDA post-processing path in this branch. Can parameters are stored directly under `detectors.can`.
-
-AprilTag detection uses `pupil_apriltags` with `tag36h11`; it does not require a learned model. The printable tag is `assets/bin_apriltag_36h11_id_0.png`.
-
-## Logs And References
-
-Runtime logs are written under `logs/` and ignored by Git. Two curated legacy examples are retained under `legacy_params/logs/` to show a successful and a failed earlier run. See `PROJECT_STRUCTURE.md`, `FSM_ARCHITECTURE.md`, and `tests/NOTEBOOK_PARAMETER_GUIDE.md` for detailed ownership and testing guidance.
+See `FSM_ARCHITECTURE.md` for state and data flow, and `PROJECT_STRUCTURE.md` for runtime ownership. Runtime logs are written under `logs/` and are not part of the delivered source changes.

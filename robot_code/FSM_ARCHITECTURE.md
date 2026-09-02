@@ -2,79 +2,72 @@
 
 ## Mission Model
 
-`DemoStateMachine` is the only production coordinator. It owns a `MissionContext` containing the current target, vague target map, grabbed state, completed pickup count, retries, state timing, and last observation.
+`DemoStateMachine` is the only production coordinator. `MissionContext` stores the current target, grabbed state, completed pickup count, retry bookkeeping, state timing, and last visual observation. A typed `VagueMap` separately owns approximate robot pose, mapped cans, patrol progress, and the bin docking poses.
 
-The FSM definition and implementation are deliberately separated:
+Responsibilities are separated as follows:
 
-- `demo_core/fsm_types.py` defines `MissionState`, `MissionEvent`, `TargetType`, and `MissionContext`. It contains mission data and bookkeeping but no transition table.
-- `demo_core/state_machine.py` defines `DemoStateMachine`, the transition table, state handlers, finalization sequence, retries, and cleanup.
-- `demo_core/navigation.py` implements target search, alignment, approach, and final verification actions requested by the state machine.
-- `demo_core/robot_control.py` translates those actions into base and servo commands.
-- `demo_core/depth_vision.py` manages the JetBot camera and depthNet lifecycle. `demo_core/perception.py` converts camera/model results into common target observations.
+- `demo_core/fsm_types.py` defines mission states, events, target types, and context bookkeeping.
+- `demo_core/state_machine.py` owns transitions, handlers, finalization, retries, and cleanup.
+- `demo_core/navigation.py` owns target search, alignment, approach, verification, and optional side docking.
+- `demo_core/vague_map.py` owns command odometry, approximate can memory, patrol progression, and coarse point navigation.
+- `demo_core/perception.py` converts can, AprilTag, and depth results into shared observations.
+- `demo_core/robot_control.py` translates navigation requests into base and servo commands.
 
-The nominal transition chain is:
+The nominal transition graph is:
 
 ```text
 IDLE -> INITIALIZING -> PLANNING
-PLANNING -> VERIFY_TARGET (cached target) | SEARCHING (target required) | DONE
-VERIFY_TARGET -> ALIGNING | SEARCHING
-SEARCHING -> ALIGNING | INTERMEDIATE
+PLANNING -> SEARCHING | PATROLLING | MAP_NAVIGATING | DONE
+SEARCHING -> ALIGNING | PLANNING | INTERMEDIATE
+PATROLLING -> ALIGNING | PLANNING | INTERMEDIATE
+MAP_NAVIGATING -> ALIGNING | SEARCHING | PLANNING | INTERMEDIATE
 ALIGNING -> APPROACHING | SEARCHING | INTERMEDIATE
 APPROACHING -> FINAL_VERIFY | SEARCHING | AVOIDING | INTERMEDIATE
-FINAL_VERIFY -> FINALIZING | SEARCHING | INTERMEDIATE
+FINAL_VERIFY -> FINALIZING | BIN_SIDE_DOCKING | SEARCHING | INTERMEDIATE
+BIN_SIDE_DOCKING -> FINALIZING | INTERMEDIATE
 AVOIDING -> VERIFY_TARGET | INTERMEDIATE
 FINALIZING -> PLANNING
 INTERMEDIATE -> PLANNING | FAILED
 ```
 
-The first mission target is `CAN`. A successful pickup sets `grabbed=true`, increments `completed_pickups`, and changes the planned target to `BIN`. A successful release clears `grabbed`. Once `max_pickups` is reached, planning enters `DONE`.
+A successful pickup sets `grabbed=true` and increments `completed_pickups`. The bin docking pose then becomes the coarse map destination. After release, planning prefers the nearest mapped can before resuming the interrupted patrol waypoint. A positive `runtime.max_pickups` is an early completion limit; zero delegates completion to patrol progress and mapped-can memory.
 
-`completed_pickups` is the only mission progress counter. There is no separate score flag or score value. Detector confidence remains part of an observation and must not be interpreted as mission progress.
+## Vague Map Data Flow
 
-## Navigation Contract
+Base motion reports the effective, scaled command to `CommandOdometry`. Straight movement updates position using calibrated meters per speed-second and a slip factor; turns update and normalize heading. These estimates are intentionally approximate.
 
-Can and bin navigation use the same four-stage contract:
+Every map-navigation update checks visual detection before issuing motion. A visible target immediately stops map travel and enters visual alignment. Reaching a map coordinate only starts a visual search; it never claims that the physical target has been reached.
 
-1. `SEARCHING`: rotate in short pulses until the target is accepted or the state timeout expires.
-2. `ALIGNING`: use normalized horizontal center error; turn toward the observed target until inside tolerance.
-3. `APPROACHING`: reacquire every frame, steer when necessary, and stop using the configured `bbox_height` or `depth` threshold.
-4. `FINAL_VERIFY`: repeat a tighter alignment for the required number of stable frames.
+While carrying a can toward the bin, the runtime can map incidental can detections. One depth field is reused for all candidates in the frame, upper-image candidates are rejected, and accepted world coordinates are bounds-checked and merged by radius.
 
-Can acceptance includes confidence thresholds. AprilTag acceptance is based on the configured tag ID. Both targets expose the same observation fields such as `found`, `bbox`, `center_x`, `error_x`, and normalized box height.
+## Visual Navigation
 
-The navigator consumes a stable can observation contract and does not handle inference details. `CanDetector` is the sole adapter from native jetson-inference detections to that contract.
+Can and bin navigation share four stages:
 
-## Finalization
+1. `SEARCHING` rotates until the target is accepted or the state times out.
+2. `ALIGNING` uses normalized horizontal error and stops immediately if tracking is lost.
+3. `APPROACHING` reacquires each frame, steers when needed, and stops on the configured bounding-box-height or depth condition.
+4. `FINAL_VERIFY` requires stable frames under tighter alignment rules.
 
-Can finalization is deterministic:
+Search, alignment, steering, and map heading correction use continuous commands where configured. Visual updates, target-loss limits, and timeouts are responsible for stopping them. Deterministic recovery maneuvers remain time-bounded.
 
-```text
-safe_home (during initialization)
-arm_down
-wait for servo positions
-optional base push
-grab
-carry
-optional depth verification
-```
-
-Bin finalization runs `release -> safe_home`. Mechanical-arm tuning belongs in `tuning_tools/arm_sequence_tuning.ipynb`; the FSM only consumes the resulting empirical parameters.
+The optional experimental side-docking path preserves normal front-facing bin navigation, then moves the arm to `side_view_grabbing`, waits for the servos to settle, performs the supportive base turn, and uses AprilTag geometry for base-only correction. Release uses `side_view_release_low`, followed by `safe_home` and the side-parking map-pose reset. Failure restores the carry view and reverses the supportive heading change before retry handling.
 
 ## Avoidance
 
-Avoidance is configured by `avoidance.strategy`:
+Avoidance is selected by `avoidance.strategy`:
 
-- `disabled`: approach never enters avoidance.
-- `scripted`: fixed turn, forward, and rejoin pulses, then target reacquisition.
-- `tangentbug_depth`: converts a depth profile into free-space gaps, chooses a local heading using target direction and clearance, and emits one incremental motion action. Optional overlays are written under `logs/`.
+- `disabled` never interrupts approach.
+- `scripted` uses fixed, time-bounded bypass motion.
+- `tangentbug_depth` evaluates depth contours and visible obstacle tangents, then emits one incremental correction at a time.
 
-The planner is deliberately incremental. It does not claim metric localization or a complete global TangentBug implementation.
+The planner filters configured top and bottom regions, ignores wide wall-like contours until the absolute close-depth protection is reached, and tracks confirmed obstacle geometry through tangent turns. Avoidance is independent of `VagueMapNavigator`.
 
-## Failure And Cleanup
+## Finalization And Cleanup
 
-Search/alignment/approach timeouts enter `INTERMEDIATE`. The failed target memory is cleared and the mission retries up to `runtime.retry_limit`; then it enters `FAILED`. Unexpected exceptions also enter `FAILED`.
+Can finalization runs the configured arm-down, optional push, grab, carry, and optional verification sequence. Bin finalization normally runs `release -> safe_home`; the experimental side-docking path uses its dedicated release pose first.
 
-`run()` always invokes `stop_all()` in `finally`, which stops the base, attempts `safe_home`, and releases the camera. Notebook users can also call `stop_all()` and `release_camera()` directly.
+Timeouts enter `INTERMEDIATE` and retry up to `runtime.retry_limit`. Unexpected exceptions enter `FAILED`. `run()` always invokes cleanup unless ownership was explicitly retained by a caller, and repeated cleanup calls are safe.
 
 ## Public API
 
@@ -90,5 +83,3 @@ state_machine.run()
 state_machine.stop_all()
 state_machine.release_camera()
 ```
-
-Configuration is merged as `empirical_parameters.json -> config.json -> overrides`. The old flat reference is not adapted or loaded.

@@ -23,10 +23,8 @@
   "camera": {
     "depth_enabled": true
   },
-  "detectors": {
-    "can": {
-      "enabled": true
-    }
+  "vague_map": {
+    "enabled": true
   },
   "avoidance": {
     "strategy": "disabled"

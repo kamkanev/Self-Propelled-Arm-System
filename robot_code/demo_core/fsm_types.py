@@ -10,10 +10,13 @@ class MissionState(Enum):
     PLANNING = "PLANNING"
     VERIFY_TARGET = "VERIFY_TARGET"
     SEARCHING = "SEARCHING"
+    PATROLLING = "PATROLLING"
+    MAP_NAVIGATING = "MAP_NAVIGATING"
     ALIGNING = "ALIGNING"
     APPROACHING = "APPROACHING"
     AVOIDING = "AVOIDING"
     FINAL_VERIFY = "FINAL_VERIFY"
+    BIN_SIDE_DOCKING = "BIN_SIDE_DOCKING"
     FINALIZING = "FINALIZING"
     INTERMEDIATE = "INTERMEDIATE"
     DONE = "DONE"
@@ -23,13 +26,18 @@ class MissionState(Enum):
 class MissionEvent(Enum):
     START = "START"
     INITIALIZED = "INITIALIZED"
-    TARGET_CACHED = "TARGET_CACHED"
     TARGET_REQUIRED = "TARGET_REQUIRED"
+    PATROL_REQUIRED = "PATROL_REQUIRED"
+    MAP_TARGET_AVAILABLE = "MAP_TARGET_AVAILABLE"
     TARGET_FOUND = "TARGET_FOUND"
     TARGET_MISSING = "TARGET_MISSING"
     TARGET_ALIGNED = "TARGET_ALIGNED"
     TARGET_REACHED = "TARGET_REACHED"
     TARGET_STABLE = "TARGET_STABLE"
+    SIDE_DOCK_REQUIRED = "SIDE_DOCK_REQUIRED"
+    PATROL_COMPLETE = "PATROL_COMPLETE"
+    MAP_DESTINATION_REACHED = "MAP_DESTINATION_REACHED"
+    REPLAN = "REPLAN"
     OBSTACLE_FOUND = "OBSTACLE_FOUND"
     PATH_CLEAR = "PATH_CLEAR"
     FINALIZED = "FINALIZED"
@@ -49,7 +57,7 @@ class MissionContext(object):
     """Mutable mission memory shared by state handlers."""
 
     def __init__(self):
-        self.vague_map = {}
+        self.vague_map = None
         self.distance_to_target = None
         self.grabbed = False
         self.completed_pickups = 0
@@ -102,16 +110,12 @@ class MissionContext(object):
         return time.time() - float(self.state_data.get("entered_at", time.time()))
 
     def remember_target(self, target_type, observation):
-        key = target_type.value
-        self.vague_map[key] = observation
         self.target_type = target_type
         self.target_found = True
         self.last_observation = observation
 
     def forget_target(self, target_type=None):
         target_type = target_type or self.target_type
-        if target_type is not None:
-            self.vague_map.pop(target_type.value, None)
         self.target_found = False
         self.last_observation = None
         self.distance_to_target = None
@@ -133,7 +137,7 @@ class MissionContext(object):
 
     def snapshot(self):
         return {
-            "vague_map": self.vague_map,
+            "vague_map": self.vague_map.snapshot() if self.vague_map is not None else None,
             "distance_to_target": self.distance_to_target,
             "grabbed": self.grabbed,
             "completed_pickups": self.completed_pickups,

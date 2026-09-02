@@ -9,24 +9,50 @@ from demo_core import DemoStateMachine, MissionEvent, MissionState, RobotCompone
 class FakeBase(object):
     def __init__(self):
         self.commands = []
+        self.motion_tracker = None
+        self.active_motion = None
+
+    def attach_motion_tracker(self, tracker):
+        self.motion_tracker = tracker
 
     def pulse(self, direction, speed, seconds, label):
         self.commands.append((label, direction, float(speed), float(seconds)))
+        if self.motion_tracker is not None:
+            self.motion_tracker.record_motion(direction, speed, seconds)
+
+    def start_motion(self, direction, speed, label):
+        self.active_motion = (label, direction, float(speed))
+        self.commands.append((label, direction, float(speed), "continuous"))
+
+    def motion_active(self, label=None):
+        return self.active_motion is not None and (label is None or self.active_motion[0] == label)
+
+    def update_motion_odometry(self, dry_run_step_seconds=0.0):
+        return 0.0
 
     def stop(self):
+        self.active_motion = None
         self.commands.append(("stop",))
 
 
 class FakeArm(object):
     def __init__(self):
         self.poses = []
+        self.cancelled = False
 
     def pose(self, name, pose=None):
+        self.cancelled = False
         self.poses.append((name, dict(pose or {})))
         return {1: 500}
 
     def wait_for_positions(self, targets, label):
         return True
+
+    def cancel_motion(self):
+        self.cancelled = True
+
+    def motion_cancelled(self):
+        return self.cancelled
 
 
 class FakeDepth(object):
@@ -99,14 +125,21 @@ class StateMachineTest(unittest.TestCase):
         for name in ("safe_home", "arm_down", "grab", "carry", "release"):
             pose_overrides[name] = {"pause_seconds": 0.0}
         config = load_config(overrides={
-            "runtime": {"loop_pause_seconds": 0.0},
+            "runtime": {"loop_pause_seconds": 0.0, "max_pickups": 1},
+            "vague_map": {"enabled": False},
             "navigation": {
-                "can": {"approach": {"final_verify_frames": 2}},
-                "bin": {"approach": {"final_verify_frames": 2}},
+                "can": {"approach": {
+                    "final_verify_frames": 2,
+                    "experimental_continuous": {"enabled": False},
+                }},
+                "bin": {
+                    "approach": {"final_verify_frames": 2},
+                    "side_docking": {"experimental": {"enabled": False}},
+                },
             },
             "arm": {
                 "pickup_start_delay_seconds": 0.0,
-                "push": {"speed": 0.0, "seconds": 0.0, "post_lock_seconds": 0.0},
+                "push": {"speed": "linear.slow", "seconds": 0.0, "post_lock_seconds": 0.0},
                 "poses": pose_overrides,
             },
         })

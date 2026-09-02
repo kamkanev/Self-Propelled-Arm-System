@@ -11,8 +11,11 @@ class DemoDiagnostics(object):
         self.services = services or RobotComponents.from_config(config)
 
     def start_camera(self):
-        if self.services.depth.depth is None:
-            self.services.depth.start()
+        self.services.depth.start(camera_only=True)
+        return self.read_frame()
+
+    def start_depth(self):
+        self.services.depth.start(camera_only=False)
         return self.read_frame()
 
     def read_frame(self):
@@ -53,6 +56,7 @@ class DemoDiagnostics(object):
         return self.services.bin_detector.detect(self.read_frame())
 
     def observe_depth(self):
+        self.start_depth()
         frame = self.read_frame()
         return {
             "lens": self.services.depth.observe_lens_center_frame(frame),
@@ -60,7 +64,7 @@ class DemoDiagnostics(object):
         }
 
     def preflight(self, reload_models=False):
-        self.start_camera()
+        self.start_depth()
         before = self.observe_depth()
         self.load_all(reload_models)
         return {
