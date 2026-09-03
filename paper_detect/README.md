@@ -48,7 +48,7 @@ python test_detection.py
 
 Example:
 
-![Paper detection example](screenshots/detection.png)
+![Paper detection example](../screenshots/detection.png)
 
 Stop:
 
@@ -65,7 +65,7 @@ cd aruco
 python3 aruco_detection.py
 ```
 
-![ArUco detection example](screenshots/aruco_detect.png)
+![ArUco detection example](../screenshots/aruco_detect.png)
 
 These scripts require a generated camera calibration YAML file and the physical ArUco marker size in millimeters.
 
